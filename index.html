@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="nl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Werkverdelingsapp - MBO Onderwijs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Navigation -->
+        <nav class="main-nav">
+            <div class="nav-brand">
+                <span class="brand-icon">📚</span>
+                <h1>Werkverdelingsapp</h1>
+            </div>
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-view="curriculum">
+                    <span class="tab-icon">📋</span>
+                    Curriculum
+                </button>
+                <button class="nav-tab" data-view="takenbeheer">
+                    <span class="tab-icon">✅</span>
+                    Takenbeheer
+                </button>
+                <button class="nav-tab" data-view="docenten">
+                    <span class="tab-icon">👥</span>
+                    Docenten
+                </button>
+                <button class="nav-tab" data-view="klassen">
+                    <span class="tab-icon">🏫</span>
+                    Klassen
+                </button>
+                <button class="nav-tab" data-view="taken">
+                    <span class="tab-icon">📋</span>
+                    Taken
+                </button>
+                <button class="nav-tab" data-view="verdeling">
+                    <span class="tab-icon">�</span>
+                    Mijn Overzicht
+                </button>
+                <button class="nav-tab" data-view="dashboard">
+                    <span class="tab-icon">📊</span>
+                    Dashboard
+                </button>
+            </div>
+            <div class="nav-actions">
+                <button class="btn-icon" id="btn-reset" title="Reset alle data">🗑️</button>
+                <button class="btn-icon" id="btn-save" title="Opslaan">💾</button>
+                <button class="btn-icon" id="btn-export" title="Exporteren">📤</button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <!-- Curriculum View -->
+            <section class="view active" id="view-curriculum">
+                <div class="view-header">
+                    <h2>Curriculum Beheer</h2>
+                    <p>Stel eerst leerjaren in, voeg daarna vakken toe per leerjaar</p>
+                </div>
+
+                <div class="curriculum-layout">
+                    <!-- Left column: Forms -->
+                    <div class="forms-column">
+                        <!-- Basisweken Config (collapsible) -->
+                        <div class="card form-card collapsible-card" id="basisweken-card">
+                            <div class="collapsible-header" onclick="toggleCollapsible('basisweken-card')">
+                                <h3>📅 Basisweken per Periode</h3>
+                                <span class="collapsible-summary" id="basisweken-summary"></span>
+                                <span class="collapsible-icon">▼</span>
+                            </div>
+                            <div class="collapsible-content">
+                                <p class="form-hint">Aantal lesweken per periode (voor urenberekening)</p>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="basisweken-p1">P1</label>
+                                        <input type="number" id="basisweken-p1" min="1" max="20" value="8">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="basisweken-p2">P2</label>
+                                        <input type="number" id="basisweken-p2" min="1" max="20" value="8">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="basisweken-p3">P3</label>
+                                        <input type="number" id="basisweken-p3" min="1" max="20" value="8">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="basisweken-p4">P4</label>
+                                        <input type="number" id="basisweken-p4" min="1" max="20" value="8">
+                                    </div>
+                                </div>
+                                <button type="button" id="btn-save-basisweken" class="btn btn-secondary btn-sm">
+                                    <span>💾</span> Opslaan
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Leerjaren Form -->
+                        <div class="card form-card">
+                            <h3>🎓 Leerjaren Instellen</h3>
+                            <form id="form-leerjaar">
+                                <div class="form-row-2">
+                                    <div class="form-group">
+                                        <label for="leerjaar-nummer">Leerjaar</label>
+                                        <select id="leerjaar-nummer" required>
+                                            <option value="1">Jaar 1</option>
+                                            <option value="2">Jaar 2</option>
+                                            <option value="3">Jaar 3</option>
+                                            <option value="4">Jaar 4</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="leerjaar-klassen">Aantal klassen</label>
+                                        <input type="number" id="leerjaar-klassen" min="1" max="20" value="6" required>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="leerjaar-prefix">Klascode prefix</label>
+                                    <input type="text" id="leerjaar-prefix" placeholder="bijv. 2CMD" required>
+                                    <small class="form-hint">Klassen worden: prefix + nummer (bijv. 2CMD1, 2CMD2,
+                                        etc.)</small>
+                                </div>
+                                <button type="submit" class="btn btn-secondary">
+                                    <span>🎓</span> Leerjaar Instellen
+                                </button>
+                            </form>
+
+                            <!-- Leerjaren Overview -->
+                            <div id="leerjaren-lijst" class="leerjaren-lijst">
+                            </div>
+                        </div>
+
+                        <!-- Add Subject Form -->
+                        <div class="card form-card">
+                            <h3>➕ Nieuw Vak Toevoegen</h3>
+                            <form id="form-vak">
+                                <div class="form-group">
+                                    <label for="vak-leerjaar">Leerjaar</label>
+                                    <select id="vak-leerjaar" required>
+                                        <option value="">-- Selecteer leerjaar --</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="vak-naam">Vaknaam</label>
+                                    <input type="text" id="vak-naam" placeholder="bijv. Co-creatie" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="vak-kleur">Kleur</label>
+                                    <div class="color-picker">
+                                        <input type="color" id="vak-kleur" value="#4CAF50">
+                                        <div class="color-presets">
+                                            <button type="button" class="color-preset" data-color="#4CAF50"
+                                                style="background:#4CAF50"></button>
+                                            <button type="button" class="color-preset" data-color="#2196F3"
+                                                style="background:#2196F3"></button>
+                                            <button type="button" class="color-preset" data-color="#9C27B0"
+                                                style="background:#9C27B0"></button>
+                                            <button type="button" class="color-preset" data-color="#FF9800"
+                                                style="background:#FF9800"></button>
+                                            <button type="button" class="color-preset" data-color="#E91E63"
+                                                style="background:#E91E63"></button>
+                                            <button type="button" class="color-preset" data-color="#00BCD4"
+                                                style="background:#00BCD4"></button>
+                                            <button type="button" class="color-preset" data-color="#795548"
+                                                style="background:#795548"></button>
+                                            <button type="button" class="color-preset" data-color="#607D8B"
+                                                style="background:#607D8B"></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="vak-opslagfactor">Opslagfactor VZNZ (%)</label>
+                                    <input type="number" id="vak-opslagfactor" min="0" max="100" value="40">
+                                    <small class="form-hint">Standaard 40%</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Type curriculum</label>
+                                    <div class="radio-group">
+                                        <label class="radio-label">
+                                            <input type="radio" name="vak-type" value="basisweken" checked>
+                                            <span>Basisweken (P1-P4)</span>
+                                        </label>
+                                        <label class="radio-label">
+                                            <input type="radio" name="vak-type" value="ontwikkelweken">
+                                            <span>Ontwikkelweken (OW1-OW8)</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Basisweken periodes -->
+                                <div id="basisweken-inputs" class="form-row">
+                                    <div class="form-group">
+                                        <label for="vak-p1">P1</label>
+                                        <input type="number" id="vak-p1" min="0" value="0">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="vak-p2">P2</label>
+                                        <input type="number" id="vak-p2" min="0" value="0">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="vak-p3">P3</label>
+                                        <input type="number" id="vak-p3" min="0" value="0">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="vak-p4">P4</label>
+                                        <input type="number" id="vak-p4" min="0" value="0">
+                                    </div>
+                                </div>
+
+                                <!-- Ontwikkelweken periodes -->
+                                <div id="ontwikkelweken-inputs" class="ow-inputs" style="display: none;">
+                                    <div class="form-row-2">
+                                        <div class="form-group">
+                                            <label for="vak-ow1">OW1 (P1)</label>
+                                            <input type="number" id="vak-ow1" min="0" value="0">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="vak-ow2">OW2 (P1)</label>
+                                            <input type="number" id="vak-ow2" min="0" value="0">
+                                        </div>
+                                    </div>
+                                    <div class="form-row-2">
+                                        <div class="form-group">
+                                            <label for="vak-ow3">OW3 (P2)</label>
+                                            <input type="number" id="vak-ow3" min="0" value="0">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="vak-ow4">OW4 (P2)</label>
+                                            <input type="number" id="vak-ow4" min="0" value="0">
+                                        </div>
+                                    </div>
+                                    <div class="form-row-2">
+                                        <div class="form-group">
+                                            <label for="vak-ow5">OW5 (P3)</label>
+                                            <input type="number" id="vak-ow5" min="0" value="0">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="vak-ow6">OW6 (P3)</label>
+                                            <input type="number" id="vak-ow6" min="0" value="0">
+                                        </div>
+                                    </div>
+                                    <div class="form-row-2">
+                                        <div class="form-group">
+                                            <label for="vak-ow7">OW7 (P4)</label>
+                                            <input type="number" id="vak-ow7" min="0" value="0">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="vak-ow8">OW8 (P4)</label>
+                                            <input type="number" id="vak-ow8" min="0" value="0">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group checkbox-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="vak-splitsbaar" checked>
+                                        <span>Splitsbaar</span>
+                                    </label>
+                                    <small class="form-hint">Splitsbaar = individuele eenheden kunnen apart worden
+                                        geselecteerd. Niet-splitsbaar = alleen alles of niets.</small>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary">
+                                    <span>➕</span> Vak Toevoegen
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Right column: Overview per leerjaar -->
+                    <div class="card">
+                        <h3>📚 Curriculum Overzicht</h3>
+                        <div id="vakken-lijst" class="vakken-lijst">
+                            <p class="empty-state">Stel eerst leerjaren in en voeg dan vakken toe.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Takenbeheer View -->
+            <section class="view" id="view-takenbeheer">
+                <div class="view-header">
+                    <h2>✅ Takenbeheer</h2>
+                    <p>Stel weken per periode in en maak taken aan voor docenten</p>
+                </div>
+
+                <div class="curriculum-layout">
+                    <!-- Left column: Forms -->
+                    <div class="forms-column">
+                        <!-- Weken per Periode (collapsible) -->
+                        <div class="card form-card collapsible-card" id="weken-periode-card">
+                            <div class="collapsible-header" onclick="toggleCollapsible('weken-periode-card')">
+                                <h3>📅 Weken per Periode</h3>
+                                <span class="collapsible-summary" id="weken-periode-summary"></span>
+                                <span class="collapsible-icon">▼</span>
+                            </div>
+                            <div class="collapsible-content">
+                                <form id="form-weken-periode">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="weken-p1">P1</label>
+                                            <input type="number" id="weken-p1" min="1" max="20" value="10">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="weken-p2">P2</label>
+                                            <input type="number" id="weken-p2" min="1" max="20" value="10">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="weken-p3">P3</label>
+                                            <input type="number" id="weken-p3" min="1" max="20" value="10">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="weken-p4">P4</label>
+                                            <input type="number" id="weken-p4" min="1" max="20" value="10">
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-secondary btn-sm">
+                                        <span>💾</span> Opslaan
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Taak Toevoegen -->
+                        <div class="card form-card">
+                            <h3>➕ Nieuwe Taak</h3>
+                            <form id="form-taak">
+                                <div class="form-group">
+                                    <label for="taak-naam">Naam taak</label>
+                                    <input type="text" id="taak-naam" placeholder="Bijv. Mentoraat, Vergaderingen..."
+                                        required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Kleur</label>
+                                    <input type="color" id="taak-kleur" value="#6366f1">
+                                    <div class="color-presets taak-color-presets">
+                                        <button type="button" class="color-preset" data-color="#6366f1"
+                                            style="background: #6366f1"></button>
+                                        <button type="button" class="color-preset" data-color="#10b981"
+                                            style="background: #10b981"></button>
+                                        <button type="button" class="color-preset" data-color="#f59e0b"
+                                            style="background: #f59e0b"></button>
+                                        <button type="button" class="color-preset" data-color="#ef4444"
+                                            style="background: #ef4444"></button>
+                                        <button type="button" class="color-preset" data-color="#3b82f6"
+                                            style="background: #3b82f6"></button>
+                                        <button type="button" class="color-preset" data-color="#8b5cf6"
+                                            style="background: #8b5cf6"></button>
+                                        <button type="button" class="color-preset" data-color="#ec4899"
+                                            style="background: #ec4899"></button>
+                                        <button type="button" class="color-preset" data-color="#14b8a6"
+                                            style="background: #14b8a6"></button>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="taak-totaal-uren">Totaal aantal uren</label>
+                                    <input type="number" id="taak-totaal-uren" min="0" step="0.5" value="0" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Verdeling</label>
+                                    <div class="radio-group">
+                                        <label class="radio-label">
+                                            <input type="radio" name="taak-verdeling" value="gelijk" checked>
+                                            <span>Gelijk verdelen over periodes</span>
+                                        </label>
+                                        <label class="radio-label">
+                                            <input type="radio" name="taak-verdeling" value="afwijkend">
+                                            <span>Afwijkend per periode</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="form-group" id="taak-periodes-container" style="display: none;">
+                                    <label>Uren per periode</label>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="taak-p1">P1</label>
+                                            <input type="number" id="taak-p1" min="0" step="0.5" value="0">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="taak-p2">P2</label>
+                                            <input type="number" id="taak-p2" min="0" step="0.5" value="0">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="taak-p3">P3</label>
+                                            <input type="number" id="taak-p3" min="0" step="0.5" value="0">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="taak-p4">P4</label>
+                                            <input type="number" id="taak-p4" min="0" step="0.5" value="0">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group checkbox-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="taak-voor-iedereen">
+                                        <span>Taak voor iedereen</span>
+                                    </label>
+                                    <small class="form-hint">Indien aangevinkt wordt deze taak automatisch aan alle
+                                        docenten toegevoegd.</small>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary">
+                                    <span>➕</span> Taak Toevoegen
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Right column: Taken Overzicht -->
+                    <div class="card">
+                        <h3>📋 Taken Overzicht</h3>
+                        <div id="taken-lijst" class="vakken-lijst">
+                            <p class="empty-state">Nog geen taken aangemaakt.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Docenten View -->
+            <section class="view" id="view-docenten">
+                <div class="view-header">
+                    <h2>Docenten Beheer</h2>
+                    <p>Voeg docenten toe die werk kunnen ontvangen</p>
+                </div>
+
+                <div class="docenten-layout">
+                    <div class="card form-card">
+                        <h3>➕ Nieuwe Docent Toevoegen</h3>
+                        <form id="form-docent">
+                            <div class="form-group">
+                                <label for="docent-naam">Naam</label>
+                                <input type="text" id="docent-naam" placeholder="bijv. Jan Jansen" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <span>➕</span> Docent Toevoegen
+                            </button>
+                        </form>
+
+                        <div class="quick-add">
+                            <h4>Snel meerdere docenten toevoegen</h4>
+                            <textarea id="docenten-bulk"
+                                placeholder="Eén naam per regel:&#10;Jan Jansen&#10;Piet de Vries&#10;Marie Smit"
+                                rows="5"></textarea>
+                            <button type="button" class="btn btn-secondary" id="btn-bulk-add">
+                                Allemaal Toevoegen
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>👥 Docenten Overzicht</h3>
+                        <div id="docenten-lijst" class="docenten-lijst">
+                            <p class="empty-state">Nog geen docenten toegevoegd.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Klassen View -->
+            <section class="view" id="view-klassen">
+                <div class="view-header">
+                    <h2>Leseenheden per Klas</h2>
+                    <p>Selecteer een klas en vink de leseenheden aan die je wilt claimen</p>
+                </div>
+
+                <div class="klassen-layout">
+                    <!-- Selection Panel -->
+                    <div class="card klassen-selectors">
+                        <h3>🔍 Selectie</h3>
+                        <div class="form-group">
+                            <label for="klassen-docent">Docent</label>
+                            <select id="klassen-docent" required>
+                                <option value="">-- Selecteer jezelf --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="klassen-leerjaar">Leerjaar</label>
+                            <select id="klassen-leerjaar" required>
+                                <option value="">-- Selecteer leerjaar --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="klassen-klas">Klas</label>
+                            <select id="klassen-klas" required disabled>
+                                <option value="">-- Selecteer eerst leerjaar --</option>
+                            </select>
+                        </div>
+
+                        <div class="klassen-legenda">
+                            <h4>Legenda</h4>
+                            <div class="legenda-item">
+                                <span class="legenda-box available"></span> Beschikbaar
+                            </div>
+                            <div class="legenda-item">
+                                <span class="legenda-box mine"></span> Van jou
+                            </div>
+                            <div class="legenda-item">
+                                <span class="legenda-box taken"></span> Van anderen
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Curriculum per class -->
+                    <div class="card klassen-curriculum">
+                        <h3>📚 Curriculum <span id="klassen-klas-titel"></span></h3>
+                        <div id="klassen-curriculum-grid" class="klassen-grid">
+                            <p class="empty-state">Selecteer een docent, leerjaar en klas om het curriculum te zien</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Taken View (Docent Task Selection) -->
+            <section class="view" id="view-taken">
+                <div class="view-header">
+                    <h2>📋 Taken Selecteren</h2>
+                    <p>Selecteer de taken die je wilt uitvoeren</p>
+                </div>
+
+                <div class="taken-layout">
+                    <!-- Selection Panel -->
+                    <div class="card taken-selectors">
+                        <h3>🔍 Selectie</h3>
+                        <div class="form-group">
+                            <label for="taken-docent">Docent</label>
+                            <select id="taken-docent" required>
+                                <option value="">-- Selecteer jezelf --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Available Tasks -->
+                    <div class="card taken-lijst-container">
+                        <h3>✅ Beschikbare Taken</h3>
+                        <div id="taken-selectie-grid" class="taken-selectie-grid">
+                            <p class="empty-state">Selecteer een docent om taken te zien</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Mijn Overzicht View -->
+            <section class="view" id="view-verdeling">
+                <div class="view-header">
+                    <h2>📋 Mijn Overzicht</h2>
+                    <div class="docent-selector">
+                        <label for="select-docent">Docent:</label>
+                        <select id="select-docent">
+                            <option value="">-- Selecteer jezelf --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mijn-overzicht-layout">
+                    <!-- Overview grid -->
+                    <div class="card">
+                        <h3>🎓 Onderwijs</h3>
+                        <div id="mijn-overzicht-grid" class="klassen-grid">
+                            <p class="empty-state">Selecteer een docent om je overzicht te zien</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>📋 Taken</h3>
+                        <div id="taken-grid" class="klassen-grid">
+                            <p class="empty-state">Geen taken ingevoerd</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Dashboard View -->
+            <section class="view" id="view-dashboard">
+                <div class="view-header dashboard-header">
+                    <div class="dashboard-title">
+                        <h2>📊 Dashboard</h2>
+                        <div class="progress-overview">
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" id="progress-bar"></div>
+                            </div>
+                            <span class="progress-text" id="progress-text">0% verdeeld</span>
+                        </div>
+                    </div>
+                    <div class="dashboard-stats">
+                        <div class="stat">
+                            <span class="stat-value" id="stat-total">0</span>
+                            <span class="stat-label">Totaal</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value" id="stat-verdeeld">0</span>
+                            <span class="stat-label">Verdeeld</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value" id="stat-resterend">0</span>
+                            <span class="stat-label">Resterend</span>
+                        </div>
+                        <div class="stat warning">
+                            <span class="stat-value" id="stat-conflicten">0</span>
+                            <span class="stat-label">Conflicten</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conflicts Alert -->
+                <div id="conflicten-container" class="conflicten-container" style="display:none;">
+                    <h3>⚠️ Conflicten</h3>
+                    <div id="conflicten-lijst"></div>
+                </div>
+
+                <!-- All Docents Grid - Full 4K view -->
+                <div class="dashboard-grid" id="dashboard-grid">
+                    <p class="empty-state">Voeg docenten toe om het dashboard te zien</p>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
