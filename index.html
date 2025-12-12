@@ -20,31 +20,31 @@
                 <h1>Werkverdelingsapp</h1>
             </div>
             <div class="nav-tabs">
-                <button class="nav-tab active" data-view="Lessenbeheer">
+                <button class="nav-tab active" data-view="curriculum">
                     <span class="tab-icon">📋</span>
                     Lessenbeheer
                 </button>
-                <button class="nav-tab" data-view="Takenbeheer">
+                <button class="nav-tab" data-view="takenbeheer">
                     <span class="tab-icon">✅</span>
                     Takenbeheer
                 </button>
-                <button class="nav-tab" data-view="Docentenbeheer">
+                <button class="nav-tab" data-view="docenten">
                     <span class="tab-icon">👥</span>
                     Docenten
                 </button>
-                <button class="nav-tab" data-view="Curriculum">
+                <button class="nav-tab" data-view="klassen">
                     <span class="tab-icon">🏫</span>
                     Klassen
                 </button>
-                <button class="nav-tab" data-view="Taken">
+                <button class="nav-tab" data-view="taken">
                     <span class="tab-icon">📋</span>
                     Taken
                 </button>
-                <button class="nav-tab" data-view="Mijn 'dummy'-PvI">
-                    <span class="tab-icon">�</span>
-                    Mijn Overzicht
+                <button class="nav-tab" data-view="verdeling">
+                    <span class="tab-icon">👤</span>
+                    Dummy PvI's
                 </button>
-                <button class="nav-tab" data-view="Dashboard">
+                <button class="nav-tab" data-view="dashboard">
                     <span class="tab-icon">📊</span>
                     Dashboard
                 </button>
@@ -413,6 +413,19 @@
                                     </label>
                                     <small class="form-hint">Indien aangevinkt wordt deze taak automatisch aan alle
                                         docenten toegevoegd.</small>
+                                </div>
+
+                                <div class="form-group checkbox-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="taak-max-docenten-check">
+                                        <span>Maximum aantal docenten</span>
+                                    </label>
+                                    <div id="taak-max-docenten-container" style="display: none; margin-top: 0.5rem;">
+                                        <input type="number" id="taak-max-docenten" min="1" value="1"
+                                            style="width: 80px;">
+                                        <small class="form-hint">Maximaal aantal docenten dat deze taak kan
+                                            selecteren.</small>
+                                    </div>
                                 </div>
 
                                 <button type="submit" class="btn btn-primary">
