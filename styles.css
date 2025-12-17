@@ -2490,16 +2490,38 @@ body {
     text-align: center;
 }
 
+/* Mijn Overzicht - original 2-column flex layout */
 .uren-mini-row {
-    display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr;
-    gap: var(--space-xs);
+    display: flex;
+    justify-content: space-between;
     padding: 2px 0;
     color: var(--text-secondary);
     font-size: 0.75rem;
 }
 
-.uren-mini-header {
+.uren-mini-subtotal {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    margin-top: auto;
+    padding-top: var(--space-xs);
+    border-top: 1px solid var(--border-color);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Lessen page - 4-column grid layout for lesuren-tabel */
+.lesuren-section {
+    min-width: 180px;
+}
+
+.lesuren-tabel {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
+}
+
+.lesuren-tabel .uren-mini-header {
     display: grid;
     grid-template-columns: 2fr 1fr 1fr 1fr;
     gap: var(--space-xs);
@@ -2511,33 +2533,22 @@ body {
     margin-bottom: var(--space-xs);
 }
 
-.uren-mini-header span:not(:first-child),
-.uren-mini-row span:not(:first-child),
-.uren-mini-subtotal span:not(:first-child) {
-    text-align: right;
-}
-
-.uren-mini-subtotal {
+.lesuren-tabel .uren-mini-row {
     display: grid;
     grid-template-columns: 2fr 1fr 1fr 1fr;
     gap: var(--space-xs);
-    padding: 4px 0;
-    margin-top: auto;
-    padding-top: var(--space-xs);
-    border-top: 1px solid var(--border-color);
-    font-weight: 600;
-    font-size: 0.75rem;
-    color: var(--text-primary);
 }
 
-.lesuren-section {
-    min-width: 180px;
+.lesuren-tabel .uren-mini-subtotal {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: var(--space-xs);
 }
 
-.lesuren-tabel {
-    background: var(--bg-secondary);
-    border-radius: var(--radius-sm);
-    padding: var(--space-sm);
+.lesuren-tabel .uren-mini-header span:not(:first-child),
+.lesuren-tabel .uren-mini-row span:not(:first-child),
+.lesuren-tabel .uren-mini-subtotal span:not(:first-child) {
+    text-align: right;
 }
 
 @media (max-width: 768px) {
