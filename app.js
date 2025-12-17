@@ -17,7 +17,15 @@ const state = {
     wekenOpgeslagen: false, // track if weken have been saved
     taken: [], // { id, naam, urenPerPeriode: {1,2,3,4}, voorIedereen: boolean }
     docentTaken: [], // { docentId, taakId, periodes: {1,2,3,4} }
-    geselecteerdeDocent: null
+    geselecteerdeDocent: null,
+    // User and team management
+    currentUser: {
+        id: null,
+        naam: '',
+        rol: null, // 'teamleider' of 'teamlid'
+        teamId: 'default-team'
+    },
+    teamId: 'default-team' // All data belongs to this team
 };
 
 // Generate unique IDs
@@ -49,6 +57,8 @@ function loadFromLocalStorage() {
             state.wekenOpgeslagen = parsed.wekenOpgeslagen || false;
             state.taken = parsed.taken || [];
             state.docentTaken = parsed.docentTaken || [];
+            state.currentUser = parsed.currentUser || { id: null, naam: '', rol: null, teamId: 'default-team' };
+            state.teamId = parsed.teamId || 'default-team';
         } catch (e) {
             console.error('Error loading state:', e);
         }
@@ -61,6 +71,69 @@ function showSaveIndicator() {
     setTimeout(() => {
         saveBtn.textContent = '💾';
     }, 1000);
+}
+
+// ============================================
+// ROLE MANAGEMENT
+// ============================================
+
+function showRoleSelectionModal() {
+    document.getElementById('role-selection-modal').style.display = 'flex';
+}
+
+function hideRoleSelectionModal() {
+    document.getElementById('role-selection-modal').style.display = 'none';
+}
+
+function setUserRole(role) {
+    state.currentUser.rol = role;
+    state.currentUser.id = generateId();
+    saveToLocalStorage();
+    hideRoleSelectionModal();
+    updateTabVisibility();
+
+    // Navigate to appropriate default view
+    if (role === 'teamlid') {
+        // Switch to Klassen view for teamleden
+        const klassenTab = document.querySelector('[data-view="klassen"]');
+        if (klassenTab) {
+            klassenTab.click();
+        }
+    }
+}
+
+function updateTabVisibility() {
+    const role = state.currentUser.rol;
+    const adminTabs = document.querySelectorAll('.nav-tab[data-role="admin"]');
+
+    adminTabs.forEach(tab => {
+        if (role === 'teamleider') {
+            tab.classList.remove('role-hidden');
+        } else {
+            tab.classList.add('role-hidden');
+        }
+    });
+}
+
+function getCurrentUserRole() {
+    return state.currentUser.rol;
+}
+
+function checkRoleOnLoad() {
+    // If no role is set, show the role selection modal
+    if (!state.currentUser.rol) {
+        showRoleSelectionModal();
+    } else {
+        updateTabVisibility();
+
+        // If teamlid, switch to first visible tab
+        if (state.currentUser.rol === 'teamlid') {
+            const klassenTab = document.querySelector('[data-view="klassen"]');
+            if (klassenTab && !klassenTab.classList.contains('role-hidden')) {
+                klassenTab.click();
+            }
+        }
+    }
 }
 
 // ============================================
@@ -1888,6 +1961,16 @@ function renderVerdelingView() {
 
     if (!state.geselecteerdeDocent) {
         container.innerHTML = '<p class="empty-state">Selecteer een docent om je overzicht te zien</p>';
+        // Also clear the taken grid
+        const takenGrid = document.getElementById('taken-grid');
+        if (takenGrid) {
+            takenGrid.innerHTML = '<p class="empty-state">Selecteer een docent om taken te zien</p>';
+        }
+        // Remove totale inzet bar if it exists
+        const existingTotaleInzet = document.querySelector('.totale-inzet-bar');
+        if (existingTotaleInzet) {
+            existingTotaleInzet.remove();
+        }
         return;
     }
 
@@ -2757,6 +2840,9 @@ document.addEventListener('DOMContentLoaded', () => {
     updateDocentSelector();
     updateLeerjaarSelector();
 
+    // Check role and show role selection modal if needed
+    checkRoleOnLoad();
+
     console.log('Werkverdelingsapp initialized!');
 });
 
@@ -2771,3 +2857,4 @@ window.saveEditVak = saveEditVak;
 window.editTaak = editTaak;
 window.closeEditTaakModal = closeEditTaakModal;
 window.saveEditTaak = saveEditTaak;
+window.setUserRole = setUserRole;

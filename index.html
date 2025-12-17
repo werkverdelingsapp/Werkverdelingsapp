@@ -20,15 +20,15 @@
                 <h1>Werkverdelingsapp</h1>
             </div>
             <div class="nav-tabs">
-                <button class="nav-tab active" data-view="curriculum">
+                <button class="nav-tab active" data-view="curriculum" data-role="admin">
                     <span class="tab-icon">📋</span>
                     Lessenbeheer
                 </button>
-                <button class="nav-tab" data-view="takenbeheer">
+                <button class="nav-tab" data-view="takenbeheer" data-role="admin">
                     <span class="tab-icon">✅</span>
                     Takenbeheer
                 </button>
-                <button class="nav-tab" data-view="docenten">
+                <button class="nav-tab" data-view="docenten" data-role="admin">
                     <span class="tab-icon">👥</span>
                     Teamledenbeheer
                 </button>
@@ -883,6 +883,32 @@
                         Opslaan</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+
+    <!-- Role Selection Modal -->
+    <div id="role-selection-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content role-selection-content">
+            <div class="modal-header">
+                <h3>👋 Welkom bij de Werkverdelingsapp</h3>
+            </div>
+            <div class="modal-body role-selection-body">
+                <p>Selecteer je rol om te beginnen:</p>
+                <div class="role-buttons">
+                    <button type="button" class="btn btn-role" onclick="setUserRole('teamleider')">
+                        <span class="role-icon">👔</span>
+                        <span class="role-title">Ik ben teamleider</span>
+                        <span class="role-desc">Volledige toegang: lessen, taken en teamleden beheren</span>
+                    </button>
+                    <button type="button" class="btn btn-role" onclick="setUserRole('teamlid')">
+                        <span class="role-icon">👤</span>
+                        <span class="role-title">Ik ben teamlid</span>
+                        <span class="role-desc">Klassen en taken bekijken, werkverdeling doen</span>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
