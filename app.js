@@ -7,7 +7,7 @@
 // ============================================
 
 const state = {
-    leerjaren: [], // { nummer, aantalKlassen, prefix, klassen[] }
+    leerjaren: [], // { naam, aantalKlassen, prefix, klassen[] }
     vakken: [],
     docenten: [],
     toewijzingen: [], // { blokjeId, docentId, periode }
@@ -178,9 +178,14 @@ function initLeerjaarForm() {
     form.addEventListener('submit', (e) => {
         e.preventDefault();
 
-        const nummer = parseInt(document.getElementById('leerjaar-nummer').value);
+        const naam = document.getElementById('leerjaar-naam').value.trim();
         const aantalKlassen = parseInt(document.getElementById('leerjaar-klassen').value);
         const prefix = document.getElementById('leerjaar-prefix').value.trim();
+
+        if (!naam) {
+            alert('Geef een naam voor het leerjaar');
+            return;
+        }
 
         // Generate class names
         const klassen = [];
@@ -188,17 +193,23 @@ function initLeerjaarForm() {
             klassen.push(prefix + i);
         }
 
-        // Check if leerjaar already exists
-        const existing = state.leerjaren.find(l => l.nummer === nummer);
+        // Check if leerjaar with same name already exists
+        const existing = state.leerjaren.find(l => l.naam === naam);
         if (existing) {
             existing.aantalKlassen = aantalKlassen;
             existing.prefix = prefix;
             existing.klassen = klassen;
         } else {
-            state.leerjaren.push({ nummer, aantalKlassen, prefix, klassen });
+            state.leerjaren.push({ naam, aantalKlassen, prefix, klassen });
         }
 
-        state.leerjaren.sort((a, b) => a.nummer - b.nummer);
+        // Sort: first by last character (year number), then by first character (opleiding)
+        state.leerjaren.sort((a, b) => {
+            const lastA = a.naam.slice(-1);
+            const lastB = b.naam.slice(-1);
+            if (lastA !== lastB) return lastA.localeCompare(lastB);
+            return a.naam[0].localeCompare(b.naam[0]);
+        });
         saveToLocalStorage();
         renderLeerjarenLijst();
         updateLeerjaarSelector();
@@ -215,29 +226,128 @@ function renderLeerjarenLijst() {
     container.innerHTML = state.leerjaren.map(lj => `
         <div class="leerjaar-item">
             <div class="leerjaar-info">
-                <span class="leerjaar-badge">Jaar ${lj.nummer}</span>
+                <span class="leerjaar-badge">${escapeHtml(lj.naam)}</span>
                 <span class="leerjaar-details">${lj.aantalKlassen} klassen (${lj.klassen.join(', ')})</span>
             </div>
-            <button class="leerjaar-delete" onclick="deleteLeerjaar(${lj.nummer})" title="Verwijderen">🗑️</button>
+            <div class="leerjaar-actions">
+                <button class="leerjaar-edit" onclick="editLeerjaar('${escapeHtml(lj.naam)}')" title="Bewerken">✏️</button>
+                <button class="leerjaar-delete" onclick="deleteLeerjaar('${escapeHtml(lj.naam)}')" title="Verwijderen">🗑️</button>
+            </div>
         </div>
     `).join('');
 }
 
-function deleteLeerjaar(nummer) {
-    if (!confirm(`Jaar ${nummer} verwijderen? Alle gekoppelde vakken worden ook verwijderd.`)) return;
-    state.leerjaren = state.leerjaren.filter(l => l.nummer !== nummer);
-    state.vakken = state.vakken.filter(v => v.leerjaar !== nummer);
+function deleteLeerjaar(naam) {
+    if (!confirm(`'${naam}' verwijderen? Alle gekoppelde vakken worden ook verwijderd.`)) return;
+    state.leerjaren = state.leerjaren.filter(l => l.naam !== naam);
+    state.vakken = state.vakken.filter(v => v.leerjaar !== naam);
     saveToLocalStorage();
     renderLeerjarenLijst();
     renderVakkenLijst();
     updateLeerjaarSelector();
 }
 
+// Edit Leerjaar functionality
+let editLeerjaarState = { naam: '', klassen: [] };
+
+function editLeerjaar(naam) {
+    const leerjaar = state.leerjaren.find(l => l.naam === naam);
+    if (!leerjaar) return;
+
+    editLeerjaarState = {
+        naam: leerjaar.naam,
+        klassen: [...leerjaar.klassen] // Copy array
+    };
+
+    document.getElementById('edit-leerjaar-naam').value = naam;
+    document.getElementById('edit-leerjaar-titel').textContent = naam;
+    renderEditLeerjaarKlassen();
+    document.getElementById('edit-leerjaar-modal').style.display = 'flex';
+}
+
+function renderEditLeerjaarKlassen() {
+    const container = document.getElementById('edit-leerjaar-klassen-lijst');
+    container.innerHTML = editLeerjaarState.klassen.map(klas => {
+        // Check if this class has any toewijzingen
+        const hasToewijzingen = state.toewijzingen.some(t => t.blokjeId.includes(`-${klas}-`));
+        const deleteDisabled = hasToewijzingen ? 'disabled' : '';
+        const deleteTitle = hasToewijzingen ? 'Kan niet verwijderen: er zijn geselecteerde lessen' : 'Verwijderen';
+
+        return `
+            <div class="klas-edit-item">
+                <span class="klas-naam">${escapeHtml(klas)}</span>
+                ${hasToewijzingen ? '<span class="klas-status">🔒 In gebruik</span>' : ''}
+                <button class="klas-delete" onclick="removeKlasFromLeerjaar('${escapeHtml(klas)}')" ${deleteDisabled} title="${deleteTitle}">🗑️</button>
+            </div>
+        `;
+    }).join('');
+}
+
+function addKlasToLeerjaar() {
+    const input = document.getElementById('edit-leerjaar-nieuwe-klas');
+    const nieuweKlas = input.value.trim();
+
+    if (!nieuweKlas) {
+        alert('Voer een klasnaam in');
+        return;
+    }
+
+    if (editLeerjaarState.klassen.includes(nieuweKlas)) {
+        alert('Deze klas bestaat al');
+        return;
+    }
+
+    editLeerjaarState.klassen.push(nieuweKlas);
+    editLeerjaarState.klassen.sort();
+    input.value = '';
+    renderEditLeerjaarKlassen();
+}
+
+function removeKlasFromLeerjaar(klas) {
+    // Double-check for toewijzingen
+    const hasToewijzingen = state.toewijzingen.some(t => t.blokjeId.includes(`-${klas}-`));
+    if (hasToewijzingen) {
+        alert(`Kan '${klas}' niet verwijderen: er zijn nog geselecteerde lessen voor deze klas.`);
+        return;
+    }
+
+    if (!confirm(`Klas '${klas}' verwijderen?`)) return;
+
+    editLeerjaarState.klassen = editLeerjaarState.klassen.filter(k => k !== klas);
+    renderEditLeerjaarKlassen();
+}
+
+function saveEditLeerjaar() {
+    const leerjaar = state.leerjaren.find(l => l.naam === editLeerjaarState.naam);
+    if (!leerjaar) return;
+
+    leerjaar.klassen = [...editLeerjaarState.klassen];
+    leerjaar.aantalKlassen = leerjaar.klassen.length;
+
+    // Update vakken to include new klassen
+    state.vakken.forEach(vak => {
+        if (vak.leerjaar === leerjaar.naam) {
+            vak.klassen = [...leerjaar.klassen];
+        }
+    });
+
+    saveToLocalStorage();
+    renderLeerjarenLijst();
+    renderVakkenLijst();
+    updateLeerjaarSelector();
+    closeEditLeerjaarModal();
+}
+
+function closeEditLeerjaarModal() {
+    document.getElementById('edit-leerjaar-modal').style.display = 'none';
+    editLeerjaarState = { naam: '', klassen: [] };
+}
+
 function updateLeerjaarSelector() {
     const selector = document.getElementById('vak-leerjaar');
     if (!selector) return;
     selector.innerHTML = '<option value="">-- Selecteer leerjaar --</option>' +
-        state.leerjaren.map(lj => `<option value="${lj.nummer}">Jaar ${lj.nummer} (${lj.prefix}1-${lj.prefix}${lj.aantalKlassen})</option>`).join('');
+        state.leerjaren.map(lj => `<option value="${escapeHtml(lj.naam)}">${escapeHtml(lj.naam)} (${lj.klassen.join(', ')})</option>`).join('');
 }
 
 function initBasisweken() {
@@ -390,8 +500,8 @@ function initCurriculumForm() {
     form.addEventListener('submit', (e) => {
         e.preventDefault();
 
-        const leerjaarNummer = parseInt(document.getElementById('vak-leerjaar').value);
-        const leerjaar = state.leerjaren.find(l => l.nummer === leerjaarNummer);
+        const leerjaarNaam = document.getElementById('vak-leerjaar').value;
+        const leerjaar = state.leerjaren.find(l => l.naam === leerjaarNaam);
 
         if (!leerjaar) {
             alert('Selecteer eerst een leerjaar!');
@@ -402,7 +512,7 @@ function initCurriculumForm() {
 
         const vak = {
             id: generateId(),
-            leerjaar: leerjaarNummer,
+            leerjaar: leerjaarNaam,
             type: vakType,
             naam: document.getElementById('vak-naam').value.trim(),
             kleur: document.getElementById('vak-kleur').value,
@@ -939,19 +1049,25 @@ function renderVakkenLijst() {
         return;
     }
 
-    // Group by leerjaar
+    // Group by leerjaar (now using naam as string key)
     const grouped = {};
     vakkenMetLeerjaar.forEach(vak => {
-        const lj = vak.leerjaar || 0;
+        const lj = vak.leerjaar || '';
         if (!grouped[lj]) grouped[lj] = [];
         grouped[lj].push(vak);
     });
 
-    const leerjaarNummers = Object.keys(grouped).map(Number).sort();
+    // Sort: first by last character (year number), then by first character (opleiding)
+    const leerjaarNamen = Object.keys(grouped).sort((a, b) => {
+        const lastA = a.slice(-1);
+        const lastB = b.slice(-1);
+        if (lastA !== lastB) return lastA.localeCompare(lastB);
+        return a[0].localeCompare(b[0]);
+    });
 
-    container.innerHTML = leerjaarNummers.map(nummer => {
-        const leerjaar = state.leerjaren.find(l => l.nummer === nummer);
-        const vakken = grouped[nummer] || [];
+    container.innerHTML = leerjaarNamen.map(naam => {
+        const leerjaar = state.leerjaren.find(l => l.naam === naam);
+        const vakken = grouped[naam] || [];
         const basisVakken = vakken.filter(v => v.type !== 'ontwikkelweken');
         const owVakken = vakken.filter(v => v.type === 'ontwikkelweken');
 
@@ -979,71 +1095,79 @@ function renderVakkenLijst() {
         });
 
         const totalBOT = basisBOT + owBOT;
-        const aantalKlassen = leerjaar ? leerjaar.klassen.length : 0;
+        const klassenList = leerjaar ? leerjaar.klassen.join(', ') : '';
 
         return `
             <div class="leerjaar-group">
                 <div class="leerjaar-group-header">
-                    <h4>🎓 Jaar ${nummer}</h4>
-                    <span>Per klas: ${basisBOT.toFixed(1)} uren BOT in basisweken + ${owBOT.toFixed(1)} uren BOT in ontwikkelweken = ${totalBOT.toFixed(1)} BOT totaal (klokuren)</span>
+                    <h4>🎓 ${escapeHtml(naam)}</h4>
+                    <span class="leerjaar-klassen-badge">${klassenList}</span>
+                    <span class="leerjaar-bot-info">Per klas: ${totalBOT.toFixed(1)} BOT (klokuren)</span>
                 </div>
-                ${basisVakken.length > 0 ? `<div class="vak-type-label">Basisweken</div>` : ''}
-                ${basisVakken.map(vak => renderVakItem(vak)).join('')}
-                ${owVakken.length > 0 ? `<div class="vak-type-label">Ontwikkelweken</div>` : ''}
-                ${owVakken.map(vak => renderVakItem(vak)).join('')}
+                ${basisVakken.length > 0 ? `<div class="vak-type-label">Basisweken <span class="vak-type-bot">Per klas: ${basisBOT.toFixed(1)} BOT (klokuren)</span></div><div class="vakken-grid">${basisVakken.map(vak => renderVakItem(vak)).join('')}</div>` : ''}
+                ${owVakken.length > 0 ? `<div class="vak-type-label">Ontwikkelweken <span class="vak-type-bot">Per klas: ${owBOT.toFixed(1)} BOT (klokuren)</span></div><div class="vakken-grid">${owVakken.map(vak => renderVakItem(vak)).join('')}</div>` : ''}
             </div>
         `;
     }).join('');
-
-    updateFilters();
 }
 
 function renderVakItem(vak) {
-    const klassen = vak.klassen || [];
     const opslagfactor = vak.opslagfactor || 40;
     const splitsbaar = vak.splitsbaar !== false;
     let periodeInfo = '';
 
     if (vak.type === 'ontwikkelweken' && vak.ontwikkelweken) {
         const ow = vak.ontwikkelweken;
-        periodeInfo = '';
+        let headerRow = '<tr><th></th>';
+        let eenhedenRow = '<tr><td>Eenh.</td>';
+        let klouurenRow = '<tr><td>Klok.</td>';
         for (let i = 1; i <= 8; i++) {
             const eenheden = ow[i] || 0;
             const klokuren = (eenheden * 0.5).toFixed(1);
-            periodeInfo += `<span class="vak-periode">OW${i}: ${eenheden} eenheden = ${klokuren} klokuren</span>`;
+            headerRow += `<th>OW${i}</th>`;
+            eenhedenRow += `<td>${eenheden}</td>`;
+            klouurenRow += `<td>${klokuren}</td>`;
         }
+        headerRow += '</tr>';
+        eenhedenRow += '</tr>';
+        klouurenRow += '</tr>';
+        periodeInfo = `<table class="vak-periode-tabel">${headerRow}${eenhedenRow}${klouurenRow}</table>`;
     } else if (vak.periodes) {
         const p = vak.periodes;
-        periodeInfo = '';
+        let headerRow = '<tr><th></th>';
+        let eenhedenRow = '<tr><td>Eenh./wk</td>';
+        let klouurenRow = '<tr><td>Klok./wk</td>';
         for (let i = 1; i <= 4; i++) {
             const eenhedenPerWeek = p[i] || 0;
             const klokurenPerWeek = (eenhedenPerWeek * 0.5).toFixed(1);
-            periodeInfo += `<span class="vak-periode">P${i}: ${eenhedenPerWeek} eenheden = ${klokurenPerWeek} klokuren per week</span>`;
+            headerRow += `<th>P${i}</th>`;
+            eenhedenRow += `<td>${eenhedenPerWeek}</td>`;
+            klouurenRow += `<td>${klokurenPerWeek}</td>`;
         }
+        headerRow += '</tr>';
+        eenhedenRow += '</tr>';
+        klouurenRow += '</tr>';
+        periodeInfo = `<table class="vak-periode-tabel">${headerRow}${eenhedenRow}${klouurenRow}</table>`;
     }
 
-    // Format class codes
-    const klassenText = klassen.length > 0 ? klassen.join(', ') : 'Geen klassen';
-
     return `
-        <div class="vak-item vak-item-expanded" style="border-left-color: ${vak.kleur}">
-            <div class="vak-color" style="background: ${vak.kleur}"></div>
-            <div class="vak-info">
-                <div class="vak-naam">${escapeHtml(vak.naam)}</div>
-                <div class="vak-klassen-row">
-                    <span class="vak-klassen-label">Klassen:</span>
-                    <span class="vak-klassen-codes leerjaar-badge-style">${klassenText}</span>
+        <div class="vak-item vak-card" style="--vak-kleur: ${vak.kleur}">
+            <div class="vak-card-header">
+                <div class="vak-color-bar" style="background: ${vak.kleur}"></div>
+                <div class="vak-header-content">
+                    <div class="vak-naam">${escapeHtml(vak.naam)}</div>
+                    <div class="vak-meta-inline">
+                        <span>VZNZ ${opslagfactor}%</span>
+                        <span>${splitsbaar ? '✂️' : '🔒'}</span>
+                    </div>
                 </div>
-                <div class="vak-periodes">${periodeInfo}</div>
-                <div class="vak-meta-row">
-                    <span class="vak-meta">VZNZ: ${opslagfactor}%</span>
-                    <span class="vak-meta">${splitsbaar ? '✂️ Splitsbaar' : '🔒 Niet splitsbaar'}</span>
-                    <span class="vak-meta">${vak.type === 'ontwikkelweken' ? '📅 Ontwikkelweken' : '📅 Basisweken'}</span>
+                <div class="vak-actions">
+                    <button onclick="editVak('${vak.id}')" title="Bewerken">✏️</button>
+                    <button onclick="deleteVak('${vak.id}')" title="Verwijderen">🗑️</button>
                 </div>
             </div>
-            <div class="vak-actions">
-                <button onclick="editVak('${vak.id}')" title="Bewerken">✏️</button>
-                <button onclick="deleteVak('${vak.id}')" title="Verwijderen">🗑️</button>
+            <div class="vak-card-body">
+                <div class="vak-periodes">${periodeInfo}</div>
             </div>
         </div>
     `;
@@ -1357,7 +1481,12 @@ function renderDocentenLijst() {
     // Constants for FTE calculation
     const BESCHIKBAAR_PER_FTE = 1600; // 1659 - 59 uur deskundigheidsbevordering
 
-    container.innerHTML = state.docenten.map(docent => {
+    // Sort docenten by second letter onwards
+    const sortedDocenten = [...state.docenten].sort((a, b) =>
+        a.naam.substring(1).localeCompare(b.naam.substring(1))
+    );
+
+    container.innerHTML = sortedDocenten.map(docent => {
         // Get FTE values with defaults for backward compatibility
         const brutoFTE = docent.aanstellingBruto ?? 1.0;
         const inhouding = docent.inhouding ?? 0;
@@ -1423,8 +1552,9 @@ function deleteDocent(docentId) {
 
 function updateDocentSelector() {
     const selector = document.getElementById('select-docent');
+    const sortedDocenten = [...state.docenten].sort((a, b) => a.naam.substring(1).localeCompare(b.naam.substring(1)));
     selector.innerHTML = '<option value="">-- Selecteer docent --</option>' +
-        state.docenten.map(d => `<option value="${d.id}">${escapeHtml(d.naam)}</option>`).join('');
+        sortedDocenten.map(d => `<option value="${d.id}">${escapeHtml(d.naam)}</option>`).join('');
 }
 
 // Edit Docent Functions
@@ -1557,7 +1687,7 @@ function initKlassenView() {
     });
 
     leerjaarSelect.addEventListener('change', () => {
-        klassenState.geselecteerdLeerjaar = leerjaarSelect.value ? parseInt(leerjaarSelect.value) : null;
+        klassenState.geselecteerdLeerjaar = leerjaarSelect.value || null;
         updateKlassenKlasSelector();
         klassenState.geselecteerdeKlas = null;
         renderKlassenCurriculum();
@@ -1577,14 +1707,15 @@ function renderKlassenView() {
 
 function updateKlassenDocentSelector() {
     const selector = document.getElementById('klassen-docent');
+    const sortedDocenten = [...state.docenten].sort((a, b) => a.naam.substring(1).localeCompare(b.naam.substring(1)));
     selector.innerHTML = '<option value="">-- Selecteer jezelf --</option>' +
-        state.docenten.map(d => `<option value="${d.id}" ${klassenState.geselecteerdeDocent === d.id ? 'selected' : ''}>${escapeHtml(d.naam)}</option>`).join('');
+        sortedDocenten.map(d => `<option value="${d.id}" ${klassenState.geselecteerdeDocent === d.id ? 'selected' : ''}>${escapeHtml(d.naam)}</option>`).join('');
 }
 
 function updateKlassenLeerjaarSelector() {
     const selector = document.getElementById('klassen-leerjaar');
     selector.innerHTML = '<option value="">-- Selecteer leerjaar --</option>' +
-        state.leerjaren.map(lj => `<option value="${lj.nummer}" ${klassenState.geselecteerdLeerjaar === lj.nummer ? 'selected' : ''}>Jaar ${lj.nummer}</option>`).join('');
+        state.leerjaren.map(lj => `<option value="${escapeHtml(lj.naam)}" ${klassenState.geselecteerdLeerjaar === lj.naam ? 'selected' : ''}>${escapeHtml(lj.naam)}</option>`).join('');
 }
 
 function updateKlassenKlasSelector() {
@@ -1596,7 +1727,7 @@ function updateKlassenKlasSelector() {
         return;
     }
 
-    const leerjaar = state.leerjaren.find(l => l.nummer === klassenState.geselecteerdLeerjaar);
+    const leerjaar = state.leerjaren.find(l => l.naam === klassenState.geselecteerdLeerjaar);
     if (!leerjaar) {
         selector.innerHTML = '<option value="">-- Geen klassen --</option>';
         selector.disabled = true;
@@ -1683,7 +1814,7 @@ function renderKlassenCurriculum() {
     const yearPct = totalUnitsYear > 0 ? Math.round((assignedUnitsYear / totalUnitsYear) * 100) : 0;
     const classPct = totalUnitsClass > 0 ? Math.round((assignedUnitsClass / totalUnitsClass) * 100) : 0;
 
-    leerjaarTitel.innerHTML = `<span style="color:var(--accent-primary)">Jaar ${klassenState.geselecteerdLeerjaar}</span> <span style="color:#ffe9a0;font-size:0.7rem">(${yearPct}% verdeeld)</span>`;
+    leerjaarTitel.innerHTML = `<span style="color:var(--accent-primary)">${klassenState.geselecteerdLeerjaar}</span> <span style="color:#ffe9a0;font-size:0.7rem">(${yearPct}% verdeeld)</span>`;
     titel.innerHTML = `<span style="color:var(--accent-primary)">${escapeHtml(klassenState.geselecteerdeKlas)}</span> <span style="color:#ffe9a0;font-size:0.7rem">(${classPct}% verdeeld)</span>`;
 
     if (alleVakken.length === 0) {
@@ -2029,8 +2160,9 @@ function initTakenView() {
 function updateTakenDocentSelector() {
     const selector = document.getElementById('taken-docent');
     if (!selector) return;
+    const sortedDocenten = [...state.docenten].sort((a, b) => a.naam.substring(1).localeCompare(b.naam.substring(1)));
     selector.innerHTML = '<option value="">-- Selecteer jezelf --</option>' +
-        state.docenten.map(d => `<option value="${d.id}" ${takenViewState.geselecteerdeDocent === d.id ? 'selected' : ''}>${escapeHtml(d.naam)}</option>`).join('');
+        sortedDocenten.map(d => `<option value="${d.id}" ${takenViewState.geselecteerdeDocent === d.id ? 'selected' : ''}>${escapeHtml(d.naam)}</option>`).join('');
 }
 
 function renderTakenSelectie() {
@@ -3088,3 +3220,8 @@ window.setUserRole = setUserRole;
 window.editDocent = editDocent;
 window.closeEditDocentModal = closeEditDocentModal;
 window.saveEditDocent = saveEditDocent;
+window.editLeerjaar = editLeerjaar;
+window.closeEditLeerjaarModal = closeEditLeerjaarModal;
+window.saveEditLeerjaar = saveEditLeerjaar;
+window.addKlasToLeerjaar = addKlasToLeerjaar;
+window.removeKlasFromLeerjaar = removeKlasFromLeerjaar;

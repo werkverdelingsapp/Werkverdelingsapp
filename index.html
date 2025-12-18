@@ -104,33 +104,27 @@
 
                         <!-- Leerjaren Form -->
                         <div class="card form-card">
-                            <h3>🎓 Klassen aan leerjaren toevoegen</h3>
+                            <h3>🎓 Leerjaren en klassen aanmaken</h3>
                             <form id="form-leerjaar">
+                                <div class="form-group">
+                                    <label for="leerjaar-naam">Naam leerjaar</label>
+                                    <input type="text" id="leerjaar-naam" placeholder="bijv. CMD Leerjaar 1" required>
+                                    <small class="form-hint">Geef het leerjaar een unieke naam</small>
+                                </div>
                                 <div class="form-row-2">
                                     <div class="form-group">
-                                        <label for="leerjaar-nummer">Leerjaar</label>
-                                        <select id="leerjaar-nummer" required>
-                                            <option value="1">Jaar 1</option>
-                                            <option value="2">Jaar 2</option>
-                                            <option value="3">Jaar 3</option>
-                                            <option value="3v3">Jaar 3 (versneld: 3 jaar)</option>
-                                            <option value="3v35">Jaar 3 (versneld: 3,5 jaar)</option>
-                                            <option value="4">Jaar 4</option>
-                                        </select>
+                                        <label for="leerjaar-prefix">Prefix klascode</label>
+                                        <input type="text" id="leerjaar-prefix" placeholder="bijv. 1CMD" required>
                                     </div>
                                     <div class="form-group">
                                         <label for="leerjaar-klassen">Aantal klassen</label>
                                         <input type="number" id="leerjaar-klassen" min="1" max="20" value="1" required>
                                     </div>
                                 </div>
-                                <div class="form-group">
-                                    <label for="leerjaar-prefix">Prefix klascode</label>
-                                    <input type="text" id="leerjaar-prefix" placeholder="bijv. 1CMD" required>
-                                    <small class="form-hint">Klassen worden: prefix + nummer (bijv. 1CMD1, 1CMD2,
-                                        etc.)</small>
-                                </div>
+                                <small class="form-hint">Klassen worden: prefix + nummer (bijv. 1CMD1, 1CMD2,
+                                    etc.)</small>
                                 <button type="submit" class="btn btn-secondary">
-                                    <span>➕</span> Klassen aanmaken
+                                    <span>➕</span> Leerjaar aanmaken
                                 </button>
                             </form>
 
@@ -293,7 +287,7 @@
 
                     <!-- Right column: Overview per leerjaar -->
                     <div class="card">
-                        <h3>📚 Curriculumoverzicht</h3>
+                        <h3>📚 Lessenoverzicht</h3>
                         <div id="vakken-lijst" class="vakken-lijst">
                         </div>
                     </div>
@@ -454,7 +448,7 @@
 
                     <!-- Right column: Taken Overzicht -->
                     <div class="card">
-                        <h3>📋 Takenoverzicht</h3>
+                        <h3>✅ Takenoverzicht</h3>
                         <div id="taken-lijst" class="vakken-lijst">
                             <p class="empty-state">Nog geen taken aangemaakt.</p>
                         </div>
@@ -474,7 +468,7 @@
                         <h3>➕ Teamlid toevoegen</h3>
                         <form id="form-docent">
                             <div class="form-group">
-                                <label for="docent-naam">Naam</label>
+                                <label for="docent-naam">Naam (afkorting)</label>
                                 <input type="text" id="docent-naam" placeholder="bijv. fwals" required>
                             </div>
                             <div class="modal-form-row">
@@ -495,7 +489,7 @@
                     </div>
 
                     <div class="card">
-                        <h3>👥 Teamoverzicht</h3>
+                        <h3>👥 Teamledenoverzicht</h3>
                         <div id="docenten-lijst" class="docenten-lijst">
                             <p class="empty-state">Nog geen teamleden toegevoegd.</p>
                         </div>
@@ -927,6 +921,36 @@
                         Opslaan</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Edit Leerjaar Modal -->
+    <div id="edit-leerjaar-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="closeEditLeerjaarModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>✏️ Leerjaar bewerken</h3>
+                <button type="button" class="modal-close" onclick="closeEditLeerjaarModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-leerjaar-naam">
+                <h4 id="edit-leerjaar-titel"></h4>
+                <p class="form-hint">Klik op 🗑️ om een klas te verwijderen (alleen mogelijk als er geen geselecteerde
+                    lessen zijn)</p>
+                <div id="edit-leerjaar-klassen-lijst" class="klassen-edit-lijst"></div>
+                <div class="form-group" style="margin-top: var(--space-md);">
+                    <label for="edit-leerjaar-nieuwe-klas">Nieuwe klas toevoegen</label>
+                    <div class="input-button-row">
+                        <input type="text" id="edit-leerjaar-nieuwe-klas" placeholder="bijv. 1CMD5">
+                        <button type="button" class="btn btn-secondary" onclick="addKlasToLeerjaar()">➕
+                            Toevoegen</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeEditLeerjaarModal()">Annuleren</button>
+                <button type="button" class="btn btn-primary" onclick="saveEditLeerjaar()">💾 Opslaan</button>
+            </div>
         </div>
     </div>
 
