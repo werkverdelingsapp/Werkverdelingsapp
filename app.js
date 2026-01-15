@@ -3,6 +3,1068 @@
    ============================================ */
 
 // ============================================
+// FIREBASE AUTHENTICATION
+// ============================================
+
+// Current authenticated user
+let currentAuthUser = null;
+let currentUserProfile = null;
+let authInitialized = false;
+
+// Wait for Firebase to be ready
+function waitForFirebase() {
+    return new Promise((resolve) => {
+        if (window.firebaseReady) {
+            resolve();
+        } else {
+            window.addEventListener('firebase-ready', resolve, { once: true });
+        }
+    });
+}
+
+// Initialize auth state listener
+async function initFirebaseAuth() {
+    await waitForFirebase();
+
+    const { onAuthStateChanged } = window.firebaseFunctions;
+    const auth = window.firebaseAuth;
+
+    onAuthStateChanged(auth, async (user) => {
+        authInitialized = true;
+
+        if (user) {
+            // User is signed in
+            currentAuthUser = user;
+            console.log('User signed in:', user.email);
+
+            // Fetch user profile from Firestore
+            await fetchUserProfile(user.uid);
+
+            // Load team data from Firestore
+            await loadTeamDataFromFirestore();
+
+            // Subscribe to realtime updates
+            subscribeToTeamData();
+
+            // Hide login modal
+            hideLoginModal();
+
+            // Update UI with user info
+            updateUserIndicator();
+
+            // Update tab visibility based on role
+            updateTabVisibility();
+
+            // Render save states from Firestore
+            renderSavedStatesFirestore();
+
+            // Load user management data (for admins)
+            loadTeamsDropdown();
+            loadTeamsList();
+            loadUsersList();
+
+            // Setup team switcher for admins
+            setupTeamSwitcher();
+
+            // Render everything
+            renderAll();
+        } else {
+            // User is signed out
+            currentAuthUser = null;
+            currentUserProfile = null;
+            console.log('User signed out');
+
+            // Show login modal
+            showLoginModal();
+        }
+    });
+}
+
+// Fetch user profile from Firestore
+async function fetchUserProfile(userId) {
+    try {
+        const { doc, getDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const userDoc = await getDoc(doc(db, 'users', userId));
+
+        if (userDoc.exists()) {
+            currentUserProfile = userDoc.data();
+
+            // Update state with user info
+            state.currentUser = {
+                id: userId,
+                naam: currentUserProfile.afkorting || currentUserProfile.naam || '',
+                rol: currentUserProfile.rol || 'teamlid',
+                teamId: currentUserProfile.teamId || 'default-team'
+            };
+            state.teamId = currentUserProfile.teamId || 'default-team';
+
+            console.log('User profile loaded:', currentUserProfile);
+        } else {
+            console.warn('No user profile found in Firestore');
+            // Create a basic profile for new users
+            currentUserProfile = {
+                email: currentAuthUser.email,
+                naam: currentAuthUser.email.split('@')[0],
+                afkorting: '',
+                rol: 'teamlid',
+                teamId: 'default-team'
+            };
+            state.currentUser = {
+                id: userId,
+                naam: currentUserProfile.naam,
+                rol: 'teamlid',
+                teamId: 'default-team'
+            };
+        }
+    } catch (error) {
+        console.error('Error fetching user profile:', error);
+    }
+}
+
+// Show login modal
+function showLoginModal() {
+    const modal = document.getElementById('login-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+    // Hide role selection modal since we get role from database now
+    const roleModal = document.getElementById('role-selection-modal');
+    if (roleModal) {
+        roleModal.style.display = 'none';
+    }
+}
+
+// Hide login modal
+function hideLoginModal() {
+    const modal = document.getElementById('login-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Handle login form submission
+async function handleLogin(event) {
+    event.preventDefault();
+
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errorEl = document.getElementById('login-error');
+    const submitBtn = document.getElementById('login-submit-btn');
+    const btnText = submitBtn.querySelector('.login-btn-text');
+    const btnLoading = submitBtn.querySelector('.login-btn-loading');
+
+    // Show loading state
+    btnText.style.display = 'none';
+    btnLoading.style.display = 'inline';
+    submitBtn.disabled = true;
+    errorEl.style.display = 'none';
+
+    try {
+        const { signInWithEmailAndPassword } = window.firebaseFunctions;
+        const auth = window.firebaseAuth;
+
+        await signInWithEmailAndPassword(auth, email, password);
+        // onAuthStateChanged will handle the rest
+
+    } catch (error) {
+        console.error('Login error:', error);
+
+        // Show user-friendly error message
+        let message = 'Er ging iets mis bij het inloggen.';
+        switch (error.code) {
+            case 'auth/invalid-credential':
+            case 'auth/wrong-password':
+            case 'auth/user-not-found':
+                message = 'Onjuiste e-mail of wachtwoord.';
+                break;
+            case 'auth/too-many-requests':
+                message = 'Te veel inlogpogingen. Probeer later opnieuw.';
+                break;
+            case 'auth/network-request-failed':
+                message = 'Geen internetverbinding.';
+                break;
+        }
+
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+    } finally {
+        // Reset button state
+        btnText.style.display = 'inline';
+        btnLoading.style.display = 'none';
+        submitBtn.disabled = false;
+    }
+}
+
+// Handle logout
+async function handleLogout() {
+    try {
+        const { signOut } = window.firebaseFunctions;
+        const auth = window.firebaseAuth;
+
+        await signOut(auth);
+        // onAuthStateChanged will handle the rest
+
+    } catch (error) {
+        console.error('Logout error:', error);
+        alert('Er ging iets mis bij het uitloggen.');
+    }
+}
+
+// Show forgot password modal
+function showForgotPassword(event) {
+    event.preventDefault();
+    document.getElementById('login-modal').style.display = 'none';
+    document.getElementById('forgot-password-modal').style.display = 'flex';
+
+    // Pre-fill email if already entered
+    const loginEmail = document.getElementById('login-email').value;
+    if (loginEmail) {
+        document.getElementById('reset-email').value = loginEmail;
+    }
+}
+
+// Close forgot password modal
+function closeForgotPasswordModal() {
+    document.getElementById('forgot-password-modal').style.display = 'none';
+    document.getElementById('login-modal').style.display = 'flex';
+}
+
+// Handle forgot password form
+async function handleForgotPassword(event) {
+    event.preventDefault();
+
+    const email = document.getElementById('reset-email').value.trim();
+    const messageEl = document.getElementById('reset-message');
+
+    try {
+        const { sendPasswordResetEmail } = window.firebaseFunctions;
+        const auth = window.firebaseAuth;
+
+        await sendPasswordResetEmail(auth, email);
+
+        messageEl.className = 'login-message success';
+        messageEl.textContent = 'Reset link verstuurd! Check je e-mail.';
+        messageEl.style.display = 'block';
+
+    } catch (error) {
+        console.error('Password reset error:', error);
+
+        messageEl.className = 'login-message error';
+        messageEl.textContent = 'E-mailadres niet gevonden.';
+        messageEl.style.display = 'block';
+    }
+}
+
+// Update user indicator in navigation
+function updateUserIndicator() {
+    // Remove existing indicator if present
+    const existingIndicator = document.querySelector('.user-indicator');
+    if (existingIndicator) {
+        existingIndicator.remove();
+    }
+
+    if (!currentUserProfile) return;
+
+    // Create user indicator
+    const navTabs = document.querySelector('.nav-tabs');
+    if (!navTabs) return;
+
+    const indicator = document.createElement('div');
+    indicator.className = 'user-indicator';
+
+    const displayName = currentUserProfile.afkorting || currentUserProfile.naam || currentAuthUser.email;
+    const rolLabel = state.currentUser.rol === 'teamleider' ? 'Admin' : 'Teamlid';
+
+    indicator.innerHTML = `
+        <span class="user-name">${escapeHtml(displayName)}</span>
+        <span class="user-role">${rolLabel}</span>
+        <button class="btn-logout" onclick="handleLogout()" title="Uitloggen">Uitloggen</button>
+    `;
+
+    navTabs.appendChild(indicator);
+}
+
+// ============================================
+// FIRESTORE DATABASE
+// ============================================
+
+// Load team data from Firestore
+async function loadTeamDataFromFirestore() {
+    if (!state.teamId || state.teamId === 'default-team') {
+        console.log('No team ID set, using localStorage');
+        return false;
+    }
+
+    try {
+        const { doc, getDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const teamDoc = await getDoc(doc(db, 'teams', state.teamId));
+
+        if (teamDoc.exists()) {
+            const data = teamDoc.data();
+
+            // Load team data into state
+            state.leerjaren = data.leerjaren || [];
+            state.vakken = data.vakken || [];
+            state.docenten = data.docenten || [];
+            state.toewijzingen = data.toewijzingen || [];
+            state.basisweken = data.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
+            state.wekenPerPeriode = data.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
+            state.taken = data.taken || [];
+            state.docentTaken = data.docentTaken || [];
+
+            console.log('Team data loaded from Firestore:', state.teamId);
+            return true;
+        } else {
+            console.log('No team data found, initializing empty');
+            return false;
+        }
+    } catch (error) {
+        console.error('Error loading team data:', error);
+        return false;
+    }
+}
+
+// Save team data to Firestore
+async function saveTeamDataToFirestore() {
+    if (!state.teamId || state.teamId === 'default-team' || !currentAuthUser) {
+        // Fall back to localStorage if no team or not logged in
+        saveToLocalStorage();
+        return;
+    }
+
+    try {
+        const { doc, setDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const teamData = {
+            leerjaren: state.leerjaren,
+            vakken: state.vakken,
+            docenten: state.docenten,
+            toewijzingen: state.toewijzingen,
+            basisweken: state.basisweken,
+            wekenPerPeriode: state.wekenPerPeriode,
+            taken: state.taken,
+            docentTaken: state.docentTaken,
+            lastModified: new Date().toISOString(),
+            lastModifiedBy: currentAuthUser.uid
+        };
+
+        await setDoc(doc(db, 'teams', state.teamId), teamData, { merge: true });
+        console.log('Team data saved to Firestore');
+
+    } catch (error) {
+        console.error('Error saving team data:', error);
+        // Fall back to localStorage
+        saveToLocalStorage();
+    }
+}
+
+// Subscribe to realtime team data updates
+let teamDataUnsubscribe = null;
+
+function subscribeToTeamData() {
+    if (!state.teamId || state.teamId === 'default-team') return;
+
+    // Unsubscribe from previous listener
+    if (teamDataUnsubscribe) {
+        teamDataUnsubscribe();
+    }
+
+    try {
+        const { doc, onSnapshot } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        teamDataUnsubscribe = onSnapshot(doc(db, 'teams', state.teamId), (docSnapshot) => {
+            if (docSnapshot.exists()) {
+                const data = docSnapshot.data();
+
+                // Only update if data was changed by someone else
+                if (data.lastModifiedBy && data.lastModifiedBy !== currentAuthUser?.uid) {
+                    console.log('Team data updated by another user');
+
+                    state.leerjaren = data.leerjaren || [];
+                    state.vakken = data.vakken || [];
+                    state.docenten = data.docenten || [];
+                    state.toewijzingen = data.toewijzingen || [];
+                    state.basisweken = data.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
+                    state.wekenPerPeriode = data.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
+                    state.taken = data.taken || [];
+                    state.docentTaken = data.docentTaken || [];
+
+                    // Re-render UI
+                    renderAll();
+                }
+            }
+        }, (error) => {
+            console.error('Error listening to team data:', error);
+        });
+
+        console.log('Subscribed to team data updates');
+    } catch (error) {
+        console.error('Error subscribing to team data:', error);
+    }
+}
+
+// ============================================
+// SAVE STATES (Firestore)
+// ============================================
+
+// Load save states from Firestore
+async function loadSaveStatesFromFirestore() {
+    if (!state.teamId || state.teamId === 'default-team') {
+        return getSavedStates(); // Fall back to localStorage
+    }
+
+    try {
+        const { collection, getDocs, query, where } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const q = query(
+            collection(db, 'saveStates'),
+            where('teamId', '==', state.teamId)
+        );
+
+        const snapshot = await getDocs(q);
+        const saveStates = [];
+
+        snapshot.forEach(doc => {
+            saveStates.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        // Sort by timestamp, most recent first
+        saveStates.sort((a, b) => {
+            const dateA = new Date(a.timestamp || a.datum || 0);
+            const dateB = new Date(b.timestamp || b.datum || 0);
+            return dateB - dateA;
+        });
+
+        console.log('Loaded', saveStates.length, 'save states from Firestore');
+        return saveStates;
+
+    } catch (error) {
+        console.error('Error loading save states:', error);
+        return [];
+    }
+}
+
+// Create a new save state in Firestore
+async function createSaveStateFirestore(naam) {
+    if (!state.teamId || state.teamId === 'default-team' || !currentAuthUser) {
+        // Fall back to localStorage
+        saveNamedState(naam);
+        return;
+    }
+
+    try {
+        const { collection, doc, setDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const saveStateId = 'save_' + Date.now();
+        const timestamp = new Date().toISOString();
+
+        const saveStateData = {
+            naam: naam,
+            teamId: state.teamId,
+            timestamp: timestamp,
+            createdBy: currentAuthUser.uid,
+            createdByName: currentUserProfile?.afkorting || currentUserProfile?.naam || currentAuthUser.email,
+            data: {
+                leerjaren: state.leerjaren,
+                vakken: state.vakken,
+                docenten: state.docenten,
+                toewijzingen: state.toewijzingen,
+                basisweken: state.basisweken,
+                wekenPerPeriode: state.wekenPerPeriode,
+                taken: state.taken,
+                docentTaken: state.docentTaken
+            }
+        };
+
+        await setDoc(doc(db, 'saveStates', saveStateId), saveStateData);
+        console.log('Save state created:', naam);
+
+        // Refresh save states list
+        await renderSavedStatesFirestore();
+
+    } catch (error) {
+        console.error('Error creating save state:', error);
+        alert('Fout bij opslaan: ' + error.message);
+    }
+}
+
+// Load a save state from Firestore
+async function loadSaveStateFirestore(saveStateId) {
+    try {
+        const { doc, getDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const saveDoc = await getDoc(doc(db, 'saveStates', saveStateId));
+
+        if (saveDoc.exists()) {
+            const saveState = saveDoc.data();
+            const data = saveState.data;
+
+            // Load data into state
+            state.leerjaren = data.leerjaren || [];
+            state.vakken = data.vakken || [];
+            state.docenten = data.docenten || [];
+            state.toewijzingen = data.toewijzingen || [];
+            state.basisweken = data.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
+            state.wekenPerPeriode = data.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
+            state.taken = data.taken || [];
+            state.docentTaken = data.docentTaken || [];
+
+            // Save to current team data
+            await saveTeamDataToFirestore();
+
+            // Re-render
+            renderAll();
+
+            alert(`State "${saveState.naam}" is geladen!`);
+        }
+    } catch (error) {
+        console.error('Error loading save state:', error);
+        alert('Fout bij laden: ' + error.message);
+    }
+}
+
+// Delete a save state from Firestore
+async function deleteSaveStateFirestore(saveStateId) {
+    if (!confirm('Weet je zeker dat je deze state wilt verwijderen?')) {
+        return;
+    }
+
+    try {
+        const { doc, deleteDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        await deleteDoc(doc(db, 'saveStates', saveStateId));
+        console.log('Save state deleted:', saveStateId);
+
+        // Refresh list
+        await renderSavedStatesFirestore();
+
+    } catch (error) {
+        console.error('Error deleting save state:', error);
+        alert('Fout bij verwijderen: ' + error.message);
+    }
+}
+
+// Render save states from Firestore
+async function renderSavedStatesFirestore() {
+    const container = document.getElementById('saved-states-list');
+    if (!container) return;
+
+    // Check if we should use Firestore
+    if (!state.teamId || state.teamId === 'default-team' || !currentAuthUser) {
+        renderSavedStates(); // Use localStorage version
+        return;
+    }
+
+    container.innerHTML = '<p class="loading-text">Laden...</p>';
+
+    try {
+        const saveStates = await loadSaveStatesFromFirestore();
+
+        if (saveStates.length === 0) {
+            container.innerHTML = '<p class="empty-state">Nog geen opgeslagen states</p>';
+            return;
+        }
+
+        container.innerHTML = saveStates.map(state => {
+            const timestamp = new Date(state.timestamp || state.datum);
+            const dateStr = timestamp.toLocaleDateString('nl-NL', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            const createdBy = state.createdByName || 'Onbekend';
+
+            return `
+                <div class="saved-state-item">
+                    <div class="saved-state-info">
+                        <span class="saved-state-name">${escapeHtml(state.naam)}</span>
+                        <span class="saved-state-meta">${dateStr} door ${escapeHtml(createdBy)}</span>
+                    </div>
+                    <div class="saved-state-actions">
+                        <button class="btn btn-sm btn-ghost" onclick="loadSaveStateFirestore('${state.id}')" title="Laden">📂</button>
+                        <button class="btn btn-sm btn-ghost btn-danger" onclick="deleteSaveStateFirestore('${state.id}')" title="Verwijderen">🗑️</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Error rendering save states:', error);
+        container.innerHTML = '<p class="empty-state">Fout bij laden van states</p>';
+    }
+}
+
+// Override save function to use Firestore when available
+function smartSave() {
+    if (state.teamId && state.teamId !== 'default-team' && currentAuthUser) {
+        saveTeamDataToFirestore();
+    } else {
+        saveToLocalStorage();
+    }
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+// Load teams for dropdown
+async function loadTeamsDropdown() {
+    const select = document.getElementById('new-user-team');
+    if (!select) return;
+
+    try {
+        const { collection, getDocs } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const snapshot = await getDocs(collection(db, 'teams'));
+
+        select.innerHTML = '<option value="">-- Selecteer team --</option>';
+
+        snapshot.forEach(doc => {
+            const team = doc.data();
+            const option = document.createElement('option');
+            option.value = doc.id;
+            option.textContent = team.naam || doc.id;
+            select.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error('Error loading teams:', error);
+    }
+}
+
+// Load teams list for display
+async function loadTeamsList() {
+    const container = document.getElementById('teams-list');
+    if (!container) return;
+
+    try {
+        const { collection, getDocs } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const snapshot = await getDocs(collection(db, 'teams'));
+
+        if (snapshot.empty) {
+            container.innerHTML = '<p class="empty-state">Nog geen teams</p>';
+            return;
+        }
+
+        const teams = [];
+        snapshot.forEach(doc => {
+            teams.push({ id: doc.id, ...doc.data() });
+        });
+
+        container.innerHTML = teams.map(team => {
+            return `
+                <div class="team-item">
+                    <span class="team-id">${escapeHtml(team.id)}</span>
+                    <span class="team-name">${escapeHtml(team.naam || team.id)}</span>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Error loading teams list:', error);
+        container.innerHTML = '<p class="empty-state">Fout bij laden</p>';
+    }
+}
+
+// Create new team
+async function createNewTeam() {
+    const teamId = document.getElementById('new-team-id').value.trim().toUpperCase();
+    const teamName = document.getElementById('new-team-name').value.trim();
+
+    if (!teamId) {
+        alert('Vul een Team ID in (bijv. CMD)');
+        return;
+    }
+
+    try {
+        const { doc, setDoc, getDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        // Check if team already exists
+        const existingTeam = await getDoc(doc(db, 'teams', teamId));
+        if (existingTeam.exists()) {
+            alert(`Team "${teamId}" bestaat al!`);
+            return;
+        }
+
+        // Create team
+        await setDoc(doc(db, 'teams', teamId), {
+            naam: teamName || teamId,
+            createdAt: new Date().toISOString()
+        });
+
+        console.log('Team created:', teamId);
+
+        // Clear form
+        document.getElementById('new-team-id').value = '';
+        document.getElementById('new-team-name').value = '';
+
+        // Reload lists
+        await loadTeamsList();
+        await loadTeamsDropdown();
+
+        alert(`Team "${teamName || teamId}" is aangemaakt!`);
+
+    } catch (error) {
+        console.error('Error creating team:', error);
+        alert('Fout bij aanmaken: ' + error.message);
+    }
+}
+
+// Load users list
+async function loadUsersList() {
+    const container = document.getElementById('users-list');
+    if (!container) return;
+
+    try {
+        const { collection, getDocs } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const snapshot = await getDocs(collection(db, 'users'));
+
+        if (snapshot.empty) {
+            container.innerHTML = '<p class="empty-state">Nog geen gebruikers</p>';
+            return;
+        }
+
+        const users = [];
+        snapshot.forEach(doc => {
+            users.push({ id: doc.id, ...doc.data() });
+        });
+
+        // Sort by name
+        users.sort((a, b) => (a.naam || '').localeCompare(b.naam || ''));
+
+        container.innerHTML = users.map(user => {
+            const rolLabels = {
+                'admin': '👑 Admin',
+                'teamleider': '📢 Teamleider',
+                'onderwijsplanner': '📋 Planner',
+                'teamlid': '👤 Teamlid'
+            };
+            const rolLabel = rolLabels[user.rol] || '👤 Lid';
+            const teamLabel = user.teamId || 'Geen team';
+            const fteLabel = user.FTE ? `${user.FTE} FTE` : '';
+            const docenttypeLabel = user.docenttype || '';
+
+            return `
+                <div class="user-item">
+                    <div class="user-info">
+                        <span class="user-name-display">${escapeHtml(user.naam || user.email)}</span>
+                        <span class="user-afkorting">${escapeHtml(user.afkorting || '')}</span>
+                    </div>
+                    <div class="user-meta">
+                        <span class="user-team-badge">${escapeHtml(teamLabel)}</span>
+                        <span class="user-role-badge">${rolLabel}</span>
+                        ${fteLabel ? `<span class="user-fte-badge">${fteLabel}</span>` : ''}
+                    </div>
+                    <div class="user-details">
+                        <span class="user-email">${escapeHtml(user.email)}</span>
+                        ${docenttypeLabel ? `<span class="user-docenttype">${escapeHtml(docenttypeLabel)}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Error loading users:', error);
+        container.innerHTML = '<p class="empty-state">Fout bij laden</p>';
+    }
+}
+
+// Create new user
+async function createNewUser() {
+    const email = document.getElementById('new-user-email').value.trim();
+    const password = document.getElementById('new-user-password').value;
+    const afkorting = document.getElementById('new-user-afkorting').value.trim();
+    const rol = document.getElementById('new-user-role').value;
+    const teamId = document.getElementById('new-user-team').value;
+    const fte = parseFloat(document.getElementById('new-user-fte').value) || 1.0;
+    const docenttype = document.getElementById('new-user-docenttype').value.trim();
+
+    // Validation
+    if (!email || !password || !afkorting || !teamId) {
+        alert('Vul alle verplichte velden in (email, wachtwoord, afkorting, team)');
+        return;
+    }
+
+    if (password.length < 6) {
+        alert('Wachtwoord moet minimaal 6 tekens zijn');
+        return;
+    }
+
+    try {
+        const { createUserWithEmailAndPassword } = window.firebaseFunctions;
+        const { doc, setDoc } = window.firebaseFunctions;
+        const auth = window.firebaseAuth;
+        const db = window.firebaseDb;
+
+        // Note: Creating a user will sign them in automatically
+        // We need to store current user first
+        const currentUser = auth.currentUser;
+
+        // Create Firebase Auth account
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const newUserId = userCredential.user.uid;
+
+        // Create Firestore user profile
+        await setDoc(doc(db, 'users', newUserId), {
+            email: email,
+            naam: afkorting,
+            afkorting: afkorting,
+            rol: rol,
+            teamId: teamId,
+            FTE: fte,
+            docenttype: docenttype || '',
+            createdAt: new Date().toISOString(),
+            createdBy: currentUser?.uid || 'unknown'
+        });
+
+        console.log('User created:', email);
+
+        // Clear form
+        document.getElementById('new-user-email').value = '';
+        document.getElementById('new-user-password').value = '';
+        document.getElementById('new-user-afkorting').value = '';
+        document.getElementById('new-user-fte').value = '';
+        document.getElementById('new-user-docenttype').value = '';
+
+        // Reload users list
+        await loadUsersList();
+
+        alert(`Gebruiker "${afkorting}" is aangemaakt!\n\nLet op: je bent nu uitgelogd. Log opnieuw in met je eigen account.`);
+
+        // Sign out the new user (we're now logged in as them)
+        const { signOut } = window.firebaseFunctions;
+        await signOut(auth);
+
+    } catch (error) {
+        console.error('Error creating user:', error);
+
+        let message = 'Er ging iets mis bij het aanmaken.';
+        switch (error.code) {
+            case 'auth/email-already-in-use':
+                message = 'Dit e-mailadres is al in gebruik.';
+                break;
+            case 'auth/invalid-email':
+                message = 'Ongeldig e-mailadres.';
+                break;
+            case 'auth/weak-password':
+                message = 'Wachtwoord is te zwak (min. 6 tekens).';
+                break;
+        }
+
+        alert(message);
+    }
+}
+
+// ============================================
+// ADMIN - SUPER USER FUNCTIONS
+// ============================================
+
+// Check if current user is admin
+function isUserAdmin() {
+    return currentUserProfile?.rol === 'admin' || currentUserProfile?.isAdmin === true;
+}
+
+// Check if current user can edit data (not just view)
+// Admin, teamleider, onderwijsplanner can always edit
+// Teamlid can only edit when viewing their own data
+function canUserEdit() {
+    const role = state.currentUser.rol;
+
+    if (isUserAdmin() || role === 'teamleider' || role === 'onderwijsplanner') {
+        return true;
+    }
+
+    // Teamlid: check if viewing their own docent
+    if (role === 'teamlid') {
+        const myDocentId = getCurrentUserDocentId();
+
+        // Check if the selected docent matches the user's docent
+        // For klassen/lessen view
+        if (typeof klassenState !== 'undefined' && klassenState.geselecteerdeDocent) {
+            return klassenState.geselecteerdeDocent === myDocentId;
+        }
+        // For taken view
+        if (typeof takenViewState !== 'undefined' && takenViewState.geselecteerdeDocent) {
+            return takenViewState.geselecteerdeDocent === myDocentId;
+        }
+        // For niveau-3 view
+        if (state.geselecteerdeDocent) {
+            return state.geselecteerdeDocent === myDocentId;
+        }
+
+        return true; // Default to editable
+    }
+
+    return true; // Fallback
+}
+
+// Find the docent ID that matches the current user (by afkorting or name)
+function getCurrentUserDocentId() {
+    if (!currentUserProfile) return null;
+
+    const userAfkorting = currentUserProfile.afkorting?.toLowerCase();
+    const userName = currentUserProfile.naam?.toLowerCase();
+
+    // Try to find matching docent
+    const matchingDocent = state.docenten.find(d => {
+        const docentNaam = d.naam?.toLowerCase();
+        const docentAfkorting = d.afkorting?.toLowerCase();
+
+        // Match by afkorting first
+        if (userAfkorting && docentAfkorting && userAfkorting === docentAfkorting) {
+            return true;
+        }
+        // Match by name
+        if (userName && docentNaam && (userName === docentNaam || docentNaam.includes(userName))) {
+            return true;
+        }
+        return false;
+    });
+
+    return matchingDocent?.id || null;
+}
+
+// Check if user is viewing their own data
+function isViewingOwnData() {
+    const myDocentId = getCurrentUserDocentId();
+    if (!myDocentId) return true; // Can't determine, allow editing
+
+    const selectedDocentId = klassenState?.geselecteerdeDocent ||
+        takenViewState?.geselecteerdeDocent ||
+        state.geselecteerdeDocent;
+
+    return !selectedDocentId || selectedDocentId === myDocentId;
+}
+
+// Setup team switcher for admins
+async function setupTeamSwitcher() {
+    const switcher = document.getElementById('team-switcher');
+    const select = document.getElementById('active-team-select');
+
+    if (!switcher || !select) return;
+
+    // Only show for admins
+    if (!isUserAdmin()) {
+        switcher.style.display = 'none';
+        return;
+    }
+
+    switcher.style.display = 'flex';
+
+    try {
+        const { collection, getDocs } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const snapshot = await getDocs(collection(db, 'teams'));
+
+        select.innerHTML = '<option value="">-- Alle teams --</option>';
+
+        snapshot.forEach(doc => {
+            const team = doc.data();
+            const option = document.createElement('option');
+            option.value = doc.id;
+            option.textContent = team.naam || doc.id;
+            if (doc.id === state.teamId) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error('Error loading teams for switcher:', error);
+    }
+}
+
+// Switch active team (for admins)
+async function switchActiveTeam(teamId) {
+    if (!isUserAdmin()) {
+        alert('Je hebt geen toegang tot deze functie.');
+        return;
+    }
+
+    console.log('Switching to team:', teamId || 'all teams');
+
+    state.teamId = teamId || 'all-teams';
+
+    if (teamId) {
+        // Load specific team data
+        await loadTeamDataFromFirestore();
+        subscribeToTeamData();
+    } else {
+        // Clear data for "all teams" view
+        state.leerjaren = [];
+        state.vakken = [];
+        state.docenten = [];
+        state.toewijzingen = [];
+        state.taken = [];
+        state.docentTaken = [];
+    }
+
+    // Reload save states
+    await renderSavedStatesFirestore();
+
+    // Re-render
+    renderAll();
+}
+
+// Load all save states for admins (across all teams)
+async function loadAllSaveStatesForAdmin() {
+    if (!isUserAdmin()) {
+        return loadSaveStatesFromFirestore();
+    }
+
+    try {
+        const { collection, getDocs } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        // Get all save states
+        const snapshot = await getDocs(collection(db, 'saveStates'));
+        const saveStates = [];
+
+        snapshot.forEach(doc => {
+            saveStates.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        // Sort by timestamp, most recent first
+        saveStates.sort((a, b) => {
+            const dateA = new Date(a.timestamp || a.datum || 0);
+            const dateB = new Date(b.timestamp || b.datum || 0);
+            return dateB - dateA;
+        });
+
+        return saveStates;
+
+    } catch (error) {
+        console.error('Error loading all save states:', error);
+        return [];
+    }
+}
+
+// ============================================
 // STATE MANAGEMENT
 // ============================================
 
@@ -66,11 +1128,266 @@ function loadFromLocalStorage() {
 }
 
 function showSaveIndicator() {
-    const saveBtn = document.getElementById('btn-save');
-    saveBtn.textContent = '✅';
-    setTimeout(() => {
-        saveBtn.textContent = '💾';
-    }, 1000);
+    // Auto-save indicator - no longer tied to a button
+    console.log('Data opgeslagen');
+}
+
+// Render all UI components
+function renderAll() {
+    renderLeerjarenLijst();
+    renderVakkenLijst();
+    renderDocentenLijst();
+    renderTakenLijst();
+    renderTakenSelectie();
+    updateDocentSelector();
+    updateLeerjaarSelector();
+    renderSavedStates();
+
+    // Update summary displays safely
+    const basiswekenSummary = document.getElementById('basisweken-summary');
+    if (basiswekenSummary) {
+        basiswekenSummary.textContent = `P1: ${state.basisweken[1]} | P2: ${state.basisweken[2]} | P3: ${state.basisweken[3]} | P4: ${state.basisweken[4]}`;
+    }
+    const wekenPeriodeSummary = document.getElementById('weken-periode-summary');
+    if (wekenPeriodeSummary) {
+        wekenPeriodeSummary.textContent = `P1: ${state.wekenPerPeriode[1]} | P2: ${state.wekenPerPeriode[2]} | P3: ${state.wekenPerPeriode[3]} | P4: ${state.wekenPerPeriode[4]}`;
+    }
+
+    // Re-render any active views
+    if (typeof renderKlassenCurriculum === 'function') renderKlassenCurriculum();
+    if (typeof renderVerdelingView === 'function') renderVerdelingView();
+    if (typeof renderDashboard === 'function') renderDashboard();
+}
+
+// ============================================
+// ADMIN PANEL - SAVE STATES
+// ============================================
+
+const SAVE_STATES_KEY = 'werkverdelingsapp-save-states';
+
+function getSavedStates() {
+    try {
+        const saved = localStorage.getItem(SAVE_STATES_KEY);
+        return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveSaveStates(states) {
+    localStorage.setItem(SAVE_STATES_KEY, JSON.stringify(states));
+}
+
+function saveNamedState() {
+    const nameInput = document.getElementById('save-state-name');
+    const name = nameInput.value.trim();
+
+    if (!name) {
+        alert('Voer een naam in voor deze state');
+        return;
+    }
+
+    const states = getSavedStates();
+    const newState = {
+        id: generateId(),
+        name: name,
+        date: new Date().toISOString(),
+        data: JSON.parse(JSON.stringify(state)) // Deep copy
+    };
+
+    states.unshift(newState); // Add at beginning
+    saveSaveStates(states);
+
+    nameInput.value = '';
+    renderSavedStates();
+    alert(`State "${name}" opgeslagen!`);
+}
+
+// Smart save state - uses Firestore when logged in, localStorage otherwise
+function smartSaveState() {
+    const nameInput = document.getElementById('save-state-name');
+    const name = nameInput.value.trim();
+
+    if (!name) {
+        alert('Voer een naam in voor deze state');
+        return;
+    }
+
+    if (state.teamId && state.teamId !== 'default-team' && currentAuthUser) {
+        // Use Firestore
+        createSaveStateFirestore(name);
+        nameInput.value = '';
+    } else {
+        // Fall back to localStorage
+        saveNamedState();
+    }
+}
+
+function loadNamedState(stateId) {
+    const states = getSavedStates();
+    const savedState = states.find(s => s.id === stateId);
+
+    if (!savedState) {
+        alert('State niet gevonden');
+        return;
+    }
+
+    if (!confirm(`Weet je zeker dat je "${savedState.name}" wilt laden? De huidige data wordt overschreven.`)) {
+        return;
+    }
+
+    // Load the saved state into current state
+    const data = savedState.data;
+    state.leerjaren = data.leerjaren || [];
+    state.vakken = data.vakken || [];
+    state.docenten = data.docenten || [];
+    state.toewijzingen = data.toewijzingen || [];
+    state.basisweken = data.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
+    state.basiswekenOpgeslagen = data.basiswekenOpgeslagen || false;
+    state.wekenPerPeriode = data.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
+    state.wekenOpgeslagen = data.wekenOpgeslagen || false;
+    state.taken = data.taken || [];
+    state.docentTaken = data.docentTaken || [];
+    state.geselecteerdeDocent = null;
+
+    saveToLocalStorage();
+    renderAll();
+    alert(`State "${savedState.name}" geladen!`);
+}
+
+function deleteNamedState(stateId) {
+    const states = getSavedStates();
+    const savedState = states.find(s => s.id === stateId);
+
+    if (!savedState) return;
+
+    if (!confirm(`Weet je zeker dat je "${savedState.name}" wilt verwijderen?`)) {
+        return;
+    }
+
+    const newStates = states.filter(s => s.id !== stateId);
+    saveSaveStates(newStates);
+    renderSavedStates();
+}
+
+function renderSavedStates() {
+    const container = document.getElementById('saved-states-list');
+    if (!container) return;
+
+    const states = getSavedStates();
+
+    if (states.length === 0) {
+        container.innerHTML = '<p class="empty-state">Geen opgeslagen states</p>';
+        return;
+    }
+
+    container.innerHTML = states.map(s => {
+        const date = new Date(s.date);
+        const dateStr = date.toLocaleDateString('nl-NL', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        return `
+            <div class="saved-state-item">
+                <div class="saved-state-info">
+                    <div class="saved-state-name">${escapeHtml(s.name)}</div>
+                    <div class="saved-state-date">${dateStr}</div>
+                </div>
+                <div class="saved-state-actions">
+                    <button class="btn-load" onclick="loadNamedState('${s.id}')">📂 Laden</button>
+                    <button class="btn-delete" onclick="deleteNamedState('${s.id}')">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============================================
+// ADMIN PANEL - IMPORT/EXPORT
+// ============================================
+
+function exportToFile() {
+    const dataStr = JSON.stringify(state, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `werkverdeling-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function importFromFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        try {
+            const data = JSON.parse(e.target.result);
+
+            if (!confirm('Weet je zeker dat je deze data wilt importeren? De huidige data wordt overschreven.')) {
+                return;
+            }
+
+            state.leerjaren = data.leerjaren || [];
+            state.vakken = data.vakken || [];
+            state.docenten = data.docenten || [];
+            state.toewijzingen = data.toewijzingen || [];
+            state.basisweken = data.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
+            state.basiswekenOpgeslagen = data.basiswekenOpgeslagen || false;
+            state.wekenPerPeriode = data.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
+            state.wekenOpgeslagen = data.wekenOpgeslagen || false;
+            state.taken = data.taken || [];
+            state.docentTaken = data.docentTaken || [];
+            state.geselecteerdeDocent = null;
+
+            saveToLocalStorage();
+            renderAll();
+            alert('Data succesvol geïmporteerd!');
+        } catch (err) {
+            alert('Fout bij importeren: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+
+    // Reset file input
+    event.target.value = '';
+}
+
+function resetAllData() {
+    if (!confirm('WAARSCHUWING: Dit verwijdert ALLE data (teamleden, lessen, taken, toewijzingen).\n\nDeze actie kan niet ongedaan worden gemaakt!\n\nWeet je het zeker?')) {
+        return;
+    }
+
+    if (!confirm('Laatste kans: Weet je ECHT zeker dat je alle data wilt wissen?')) {
+        return;
+    }
+
+    state.leerjaren = [];
+    state.vakken = [];
+    state.docenten = [];
+    state.toewijzingen = [];
+    state.basisweken = { 1: 8, 2: 8, 3: 8, 4: 8 };
+    state.basiswekenOpgeslagen = false;
+    state.wekenPerPeriode = { 1: 10, 2: 10, 3: 10, 4: 10 };
+    state.wekenOpgeslagen = false;
+    state.taken = [];
+    state.docentTaken = [];
+    state.geselecteerdeDocent = null;
+    state.currentUser = { id: null, naam: '', rol: null, teamId: 'default-team' };
+
+    saveToLocalStorage();
+    renderAll();
+    alert('Alle data is gewist. Je wordt nu gevraagd om opnieuw je rol te kiezen.');
+    showRoleSelectionModal();
 }
 
 // ============================================
@@ -104,15 +1421,35 @@ function setUserRole(role) {
 
 function updateTabVisibility() {
     const role = state.currentUser.rol;
-    const adminTabs = document.querySelectorAll('.nav-tab[data-role="admin"]');
+    const isAdmin = isUserAdmin();
 
-    adminTabs.forEach(tab => {
-        if (role === 'teamleider') {
+    // Define which tabs each role can see
+    // Admin and teamleider/onderwijsplanner see all tabs
+    // Teamlid only sees: Lessen, Taken, Dummy PvI's, Dashboard
+
+    const allTabs = document.querySelectorAll('.nav-tab[data-view]');
+    const teamlidVisibleViews = ['klassen', 'taken', 'niveau-3', 'dashboard'];
+
+    allTabs.forEach(tab => {
+        const view = tab.getAttribute('data-view');
+
+        if (isAdmin || role === 'teamleider' || role === 'onderwijsplanner') {
+            // Admin, teamleider, onderwijsplanner see all tabs
             tab.classList.remove('role-hidden');
+        } else if (role === 'teamlid') {
+            // Teamlid only sees specific tabs
+            if (teamlidVisibleViews.includes(view)) {
+                tab.classList.remove('role-hidden');
+            } else {
+                tab.classList.add('role-hidden');
+            }
         } else {
-            tab.classList.add('role-hidden');
+            // Unknown role - show all (fallback)
+            tab.classList.remove('role-hidden');
         }
     });
+
+    console.log('Tab visibility updated for role:', role, 'isAdmin:', isAdmin);
 }
 
 function getCurrentUserRole() {
@@ -391,8 +1728,8 @@ function initBasisweken() {
     // Initial state
     updateVakFormState();
 
-    // Save button
-    document.getElementById('btn-save-basisweken')?.addEventListener('click', () => {
+    // Auto-save on input change
+    function saveBasiswekenValues() {
         [1, 2, 3, 4].forEach(p => {
             const input = document.getElementById(`basisweken-p${p}`);
             state.basisweken[p] = parseInt(input.value) || 8;
@@ -401,9 +1738,17 @@ function initBasisweken() {
         saveToLocalStorage();
         updateBasiswekenSummary();
         updateVakFormState();
-        // Collapse the card
-        document.getElementById('basisweken-card')?.classList.add('collapsed');
+    }
+
+    // Add change listeners to all basisweken inputs
+    [1, 2, 3, 4].forEach(p => {
+        document.getElementById(`basisweken-p${p}`)?.addEventListener('change', saveBasiswekenValues);
     });
+
+    // Mark as saved if values already exist
+    if (state.basisweken[1] && state.basisweken[2] && state.basisweken[3] && state.basisweken[4]) {
+        state.basiswekenOpgeslagen = true;
+    }
 }
 
 // Toggle collapsible card
@@ -606,21 +1951,12 @@ function setupTakenbeheer() {
     const wekenForm = document.getElementById('form-weken-periode');
     const taakFormCard = document.querySelector('#form-taak')?.closest('.form-card');
 
-    // Function to update taak form state
+    // Function to update taak form state - no longer blocking since periodeweken always have default values
     function updateTaakFormState() {
+        // Periodeweken have default values (10 per period), so taak form is always enabled
         if (taakFormCard) {
-            if (state.wekenOpgeslagen) {
-                taakFormCard.classList.remove('disabled-form');
-                taakFormCard.querySelector('.disabled-overlay')?.remove();
-            } else {
-                taakFormCard.classList.add('disabled-form');
-                if (!taakFormCard.querySelector('.disabled-overlay')) {
-                    const overlay = document.createElement('div');
-                    overlay.className = 'disabled-overlay';
-                    overlay.innerHTML = '<p>⚠️ Stel eerst de periodeweken in</p>';
-                    taakFormCard.appendChild(overlay);
-                }
-            }
+            taakFormCard.classList.remove('disabled-form');
+            taakFormCard.querySelector('.disabled-overlay')?.remove();
         }
     }
 
@@ -640,8 +1976,8 @@ function setupTakenbeheer() {
         document.getElementById('weken-p3').value = state.wekenPerPeriode[3] || 10;
         document.getElementById('weken-p4').value = state.wekenPerPeriode[4] || 10;
 
-        wekenForm.addEventListener('submit', (e) => {
-            e.preventDefault();
+        // Auto-save on input change
+        function saveWekenValues() {
             state.wekenPerPeriode[1] = parseInt(document.getElementById('weken-p1').value) || 10;
             state.wekenPerPeriode[2] = parseInt(document.getElementById('weken-p2').value) || 10;
             state.wekenPerPeriode[3] = parseInt(document.getElementById('weken-p3').value) || 10;
@@ -650,9 +1986,17 @@ function setupTakenbeheer() {
             saveToLocalStorage();
             updateTaakFormState();
             updateWekenPeriodeSummary();
-            // Collapse the card
-            document.getElementById('weken-periode-card')?.classList.add('collapsed');
+        }
+
+        // Add change listeners to all week inputs
+        ['weken-p1', 'weken-p2', 'weken-p3', 'weken-p4'].forEach(id => {
+            document.getElementById(id)?.addEventListener('change', saveWekenValues);
         });
+
+        // Also save on initial load if values exist
+        if (state.wekenPerPeriode[1] && state.wekenPerPeriode[2] && state.wekenPerPeriode[3] && state.wekenPerPeriode[4]) {
+            state.wekenOpgeslagen = true;
+        }
     }
 
     // Initial state
@@ -743,9 +2087,14 @@ function setupTakenbeheer() {
                 exactDocentenContainer.style.display = 'none';
             }
         });
+        // Button click handler (instead of form submit to prevent navigation)
+        document.getElementById('btn-taak-toevoegen')?.addEventListener('click', () => {
+            const taakNaam = document.getElementById('taak-naam').value.trim();
+            if (!taakNaam) {
+                alert('Voer een taaknaam in');
+                return;
+            }
 
-        taakForm.addEventListener('submit', (e) => {
-            e.preventDefault();
             const totaalUren = parseFloat(document.getElementById('taak-totaal-uren').value) || 0;
             const verdeling = document.getElementById('taak-verdeling-value').value;
 
@@ -779,11 +2128,12 @@ function setupTakenbeheer() {
 
             const taak = {
                 id: generateId(),
-                naam: document.getElementById('taak-naam').value.trim(),
+                naam: taakNaam,
                 kleur: document.getElementById('taak-kleur').value || '#6366f1',
                 totaalUren: totaalUren,
                 urenPerPeriode: urenPerPeriode,
                 verdeling: verdeling,
+                naarRato: document.getElementById('taak-naar-rato').checked,
                 voorIedereen: document.getElementById('taak-voor-iedereen').checked,
                 maxDocenten: document.getElementById('taak-max-docenten-check').checked
                     ? parseInt(document.getElementById('taak-max-docenten').value) || 1
@@ -828,18 +2178,25 @@ function renderTakenLijst() {
     const sortedTaken = [...state.taken].sort((a, b) => a.naam.localeCompare(b.naam, 'nl'));
 
     container.innerHTML = sortedTaken.map(taak => {
-        const totaalUren = Object.values(taak.urenPerPeriode).reduce((a, b) => a + b, 0);
+        const urenPerPeriode = taak.urenPerPeriode || { 1: 0, 2: 0, 3: 0, 4: 0 };
+        const totaalUren = Object.values(urenPerPeriode).reduce((a, b) => a + b, 0);
         const kleur = taak.kleur || '#6366f1';
 
         // Determine docenten constraint text (using same styling as Taken)
-        let docentenConstraint = '';
+        const constraints = [];
         if (taak.voorIedereen) {
-            docentenConstraint = '<span class="max-docenten-info">(taak voor alle teamleden)</span>';
+            constraints.push('voor alle teamleden');
         } else if (taak.exactDocenten) {
-            docentenConstraint = `<span class="max-docenten-info">(exact ${taak.exactDocenten} ${taak.exactDocenten === 1 ? 'teamlid' : 'teamleden'})</span>`;
+            constraints.push(`exact ${taak.exactDocenten} ${taak.exactDocenten === 1 ? 'teamlid' : 'teamleden'}`);
         } else if (taak.maxDocenten) {
-            docentenConstraint = `<span class="max-docenten-info">(max ${taak.maxDocenten} ${taak.maxDocenten === 1 ? 'teamlid' : 'teamleden'})</span>`;
+            constraints.push(`max ${taak.maxDocenten} ${taak.maxDocenten === 1 ? 'teamlid' : 'teamleden'}`);
         }
+        if (taak.naarRato) {
+            constraints.push('naar rato');
+        }
+        const docentenConstraint = constraints.length > 0
+            ? `<span class="max-docenten-info">(${constraints.join('; ')})</span>`
+            : '';
 
         return `
             <div class="vak-item taak-item" style="border-left-color: ${kleur}">
@@ -851,7 +2208,7 @@ function renderTakenLijst() {
                 </div>
                 <div class="vak-info">
                     <div class="vak-naam">${taak.naam} ${docentenConstraint}</div>
-                    <div class="vak-details">⏱️ ${totaalUren.toFixed(1)}u totaal <span class="vak-periodes-inline">P1: ${taak.urenPerPeriode[1].toFixed(1)} • P2: ${taak.urenPerPeriode[2].toFixed(1)} • P3: ${taak.urenPerPeriode[3].toFixed(1)} • P4: ${taak.urenPerPeriode[4].toFixed(1)}</span></div>
+                    <div class="vak-details">⏱️ ${totaalUren.toFixed(1)}u totaal <span class="vak-periodes-inline">P1: ${urenPerPeriode[1].toFixed(1)} • P2: ${urenPerPeriode[2].toFixed(1)} • P3: ${urenPerPeriode[3].toFixed(1)} • P4: ${urenPerPeriode[4].toFixed(1)}</span></div>
                 </div>
                 <div class="vak-actions">
                     <button onclick="editTaak('${taak.id}')" title="Bewerken">✏️</button>
@@ -879,6 +2236,7 @@ function editTaak(taakId) {
     document.getElementById('edit-taak-naam').value = taak.naam;
     document.getElementById('edit-taak-kleur').value = taak.kleur || '#6366f1';
     document.getElementById('edit-taak-totaal-uren').value = (taak.totaalUren || 0).toFixed(1);
+    document.getElementById('edit-taak-naar-rato').checked = taak.naarRato || false;
     document.getElementById('edit-taak-voor-iedereen').checked = taak.voorIedereen;
 
     // Max docenten
@@ -969,6 +2327,7 @@ function saveEditTaak() {
     taak.totaalUren = totaalUren;
     taak.urenPerPeriode = urenPerPeriode;
     taak.verdeling = verdeling;
+    taak.naarRato = document.getElementById('edit-taak-naar-rato').checked;
     taak.voorIedereen = document.getElementById('edit-taak-voor-iedereen').checked;
     taak.maxDocenten = document.getElementById('edit-taak-max-docenten-check').checked
         ? parseInt(document.getElementById('edit-taak-max-docenten').value) || 1
@@ -1955,7 +3314,7 @@ function renderKlassenCurriculum() {
     const leerjaarTitel = document.getElementById('klassen-leerjaar-titel');
 
     if (!klassenState.geselecteerdeDocent || !klassenState.geselecteerdLeerjaar || !klassenState.geselecteerdeKlas) {
-        container.innerHTML = '<p class="empty-state">Selecteer een docent, leerjaar en klas om het curriculum te zien</p>';
+        container.innerHTML = '<p class="empty-state">Selecteer een teamlid, leerjaar en klas om het curriculum te zien</p>';
         titel.textContent = '';
         leerjaarTitel.textContent = '';
         return;
@@ -2028,7 +3387,7 @@ function renderKlassenCurriculum() {
     titel.innerHTML = `<span style="color:var(--accent-primary)">${escapeHtml(klassenState.geselecteerdeKlas)}</span> <span style="color:#ffe9a0;font-size:0.7rem">(${classPct}% verdeeld)</span>`;
 
     if (alleVakken.length === 0) {
-        container.innerHTML = '<p class="empty-state">Geen vakken voor dit leerjaar</p>';
+        container.innerHTML = '<p class="empty-state">Geen lessen voor dit leerjaar</p>';
         return;
     }
 
@@ -2111,21 +3470,21 @@ function renderKlassenCurriculum() {
                         <h4>📚 Periode ${periode}</h4>
                     </div>
                     ${renderVakSections(basisVakkenMetPeriode, periode, 'P')}
-                    ${basisVakkenMetPeriode.length === 0 ? '<p class="empty-state" style="font-size:0.75rem">Geen vakken</p>' : ''}
+                    ${basisVakkenMetPeriode.length === 0 ? '<p class="empty-state" style="font-size:0.75rem">Geen lessen</p>' : ''}
                 </div>
                 <div class="periode-section ow-section">
                     <div class="periode-section-header">
                         <h4>⭐ Ontwikkelweek ${ow1}</h4>
                     </div>
                     ${renderVakSectionsOW(owVakkenMetOW1, ow1)}
-                    ${owVakkenMetOW1.length === 0 ? '<p class="empty-state" style="font-size:0.75rem">Geen vakken</p>' : ''}
+                    ${owVakkenMetOW1.length === 0 ? '<p class="empty-state" style="font-size:0.75rem">Geen lessen</p>' : ''}
                 </div>
                 <div class="periode-section ow-section">
                     <div class="periode-section-header">
                         <h4>⭐ Ontwikkelweek ${ow2}</h4>
                     </div>
                     ${renderVakSectionsOW(owVakkenMetOW2, ow2)}
-                    ${owVakkenMetOW2.length === 0 ? '<p class="empty-state" style="font-size:0.75rem">Geen vakken</p>' : ''}
+                    ${owVakkenMetOW2.length === 0 ? '<p class="empty-state" style="font-size:0.75rem">Geen lessen</p>' : ''}
                 </div>
                 <div class="periode-section lesuren-section">
                     <div class="periode-section-header">
@@ -2257,6 +3616,12 @@ function toggleLeseenheid(blokjeId, periodeKey) {
         return;
     }
 
+    // Check if user can edit (teamlid can only edit own data)
+    if (!canUserEdit()) {
+        alert('Je kunt alleen je eigen toewijzingen wijzigen');
+        return;
+    }
+
     const existing = state.toewijzingen.find(t => t.blokjeId === blokjeId && t.docentId === klassenState.geselecteerdeDocent);
     const takenByOther = state.toewijzingen.find(t => t.blokjeId === blokjeId && t.docentId !== klassenState.geselecteerdeDocent);
 
@@ -2382,7 +3747,7 @@ function renderTakenSelectie() {
     updateTakenDocentSelector();
 
     if (!takenViewState.geselecteerdeDocent) {
-        container.innerHTML = '<p class="empty-state">Selecteer een docent om taken te zien</p>';
+        container.innerHTML = '<p class="empty-state">Selecteer een teamlid om taken te zien</p>';
         return;
     }
 
@@ -2449,6 +3814,23 @@ function renderTakenSelectie() {
 
 
         const kleur = taak.kleur || '#6366f1';
+
+        // Build constraint text
+        const constraints = [];
+        if (isVoorIedereen) {
+            constraints.push('voor alle teamleden');
+        } else if (taak.exactDocenten) {
+            constraints.push(`exact ${taak.exactDocenten} ${taak.exactDocenten === 1 ? 'teamlid' : 'teamleden'}`);
+        } else if (taak.maxDocenten) {
+            constraints.push(`max ${taak.maxDocenten} ${taak.maxDocenten === 1 ? 'teamlid' : 'teamleden'}`);
+        }
+        if (taak.naarRato) {
+            constraints.push('naar rato');
+        }
+        const constraintText = constraints.length > 0
+            ? ` <span class="max-docenten-info">(${constraints.join('; ')})</span>`
+            : '';
+
         const itemClass = isVoorIedereen
             ? 'taak-selectie-item voor-iedereen'
             : isSelected
@@ -2472,7 +3854,7 @@ function renderTakenSelectie() {
                 </div>
                 <div class="taak-selectie-info">
                     <div class="taak-selectie-header">
-                        <span class="taak-selectie-naam">${escapeHtml(taak.naam)}${isVoorIedereen ? ' <span class="max-docenten-info">(taak voor alle teamleden)</span>' : (taak.exactDocenten ? ` <span class="max-docenten-info">(exact ${taak.exactDocenten} ${taak.exactDocenten === 1 ? 'teamlid' : 'teamleden'})</span>` : (taak.maxDocenten ? ` <span class="max-docenten-info">(max ${taak.maxDocenten} ${taak.maxDocenten === 1 ? 'teamlid' : 'teamleden'})</span>` : ''))}</span>
+                        <span class="taak-selectie-naam">${escapeHtml(taak.naam)}${constraintText}</span>
                     </div>
                     <div class="taak-selectie-meta">
                         <span>⏱️ ${totaalUren.toFixed(1)}u totaal</span>
@@ -2488,6 +3870,12 @@ function renderTakenSelectie() {
 function toggleTaakSelectie(taakId) {
     if (!takenViewState.geselecteerdeDocent) {
         alert('Selecteer eerst een docent');
+        return;
+    }
+
+    // Check if user can edit (teamlid can only edit own data)
+    if (!canUserEdit()) {
+        alert('Je kunt alleen je eigen taken wijzigen');
         return;
     }
 
@@ -2533,11 +3921,11 @@ function renderVerdelingView() {
     const container = document.getElementById('mijn-overzicht-grid');
 
     if (!state.geselecteerdeDocent) {
-        container.innerHTML = '<p class="empty-state">Selecteer een docent om je overzicht te zien</p>';
+        container.innerHTML = '<p class="empty-state">Selecteer een teamlid om je overzicht te zien</p>';
         // Also clear the taken grid
         const takenGrid = document.getElementById('taken-grid');
         if (takenGrid) {
-            takenGrid.innerHTML = '<p class="empty-state">Selecteer een docent om taken te zien</p>';
+            takenGrid.innerHTML = '<p class="empty-state">Selecteer een teamlid om taken te zien</p>';
         }
         // Remove totale inzet bar if it exists
         const existingTotaleInzet = document.querySelector('.totale-inzet-bar');
@@ -2755,17 +4143,61 @@ function renderVerdelingView() {
             existingTotaleInzet.remove();
         }
 
-        // Add new totale inzet bar
+        // Get docent's available hours
+        const BESCHIKBAAR_PER_FTE = 1600; // 1659 - 59 uur deskundigheidsbevordering
+        const docent = state.docenten.find(d => d.id === state.geselecteerdeDocent);
+        const brutoFTE = docent?.aanstellingBruto ?? 1.0;
+        const inhouding = docent?.inhouding ?? 0;
+        const nettoFTE = brutoFTE - inhouding;
+        const beschikbareUren = nettoFTE * BESCHIKBAAR_PER_FTE;
+        const beschikbaarOnderwijs = beschikbareUren * 0.75;
+        const beschikbaarTaken = beschikbareUren * 0.25;
+
+        // Calculate differences
+        const verschilOnderwijs = beschikbaarOnderwijs - totaalOnderwijs;
+        const verschilTaken = beschikbaarTaken - totaalTaakuren;
+        const verschilTotaal = beschikbareUren - totaleInzet;
+
+        // Helper for styling
+        const formatVerschil = (val) => {
+            const sign = val >= 0 ? '+' : '';
+            const cls = val >= 0 ? 'positief' : 'negatief';
+            return `<span class="balans-verschil ${cls}">${sign}${val.toFixed(1)}</span>`;
+        };
+
+        // Add new totale inzet bar with balance
         const totaleInzetContainer = document.createElement('div');
         totaleInzetContainer.className = 'totale-inzet-container';
         totaleInzetContainer.innerHTML = `
             <div class="totale-inzet-row">
                 <div class="totale-inzet-label">Totale inzet</div>
-                <div class="totale-inzet-breakdown">
-                    <span class="inzet-item">🎓 Onderwijs: ${totaalOnderwijs.toFixed(1)}u</span>
-                    <span class="inzet-item">📋 Taken: ${totaalTaakuren.toFixed(1)}u</span>
-                </div>
                 <div class="totale-inzet-value">${totaleInzet.toFixed(1)} uur</div>
+            </div>
+            <div class="uren-balans">
+                <div class="balans-header">
+                    <span class="balans-header-label"></span>
+                    <span class="balans-header-col">Beschikbaar</span>
+                    <span class="balans-header-col">Geselecteerd</span>
+                    <span class="balans-header-col">Verschil</span>
+                </div>
+                <div class="balans-row">
+                    <span class="balans-label">🎓 Onderwijs</span>
+                    <span class="balans-beschikbaar">${beschikbaarOnderwijs.toFixed(1)}u</span>
+                    <span class="balans-geselecteerd">${totaalOnderwijs.toFixed(1)}u</span>
+                    ${formatVerschil(verschilOnderwijs)}
+                </div>
+                <div class="balans-row">
+                    <span class="balans-label">📋 Taken</span>
+                    <span class="balans-beschikbaar">${beschikbaarTaken.toFixed(1)}u</span>
+                    <span class="balans-geselecteerd">${totaalTaakuren.toFixed(1)}u</span>
+                    ${formatVerschil(verschilTaken)}
+                </div>
+                <div class="balans-row balans-verschil-totaal">
+                    <span class="balans-label">📊 Verschil</span>
+                    <span class="balans-beschikbaar">${beschikbareUren.toFixed(1)}u</span>
+                    <span class="balans-geselecteerd">${totaleInzet.toFixed(1)}u</span>
+                    ${formatVerschil(verschilTotaal)}
+                </div>
             </div>
         `;
         layoutContainer.appendChild(totaleInzetContainer);
@@ -2889,7 +4321,7 @@ function renderMijnTaken() {
     if (!container) return { totaalTaakuren: 0 };
 
     if (!state.geselecteerdeDocent) {
-        container.innerHTML = '<p class="empty-state">Selecteer een docent om taken te zien</p>';
+        container.innerHTML = '<p class="empty-state">Selecteer een teamlid om taken te zien</p>';
         return { totaalTaakuren: 0 };
     }
 
@@ -2910,8 +4342,16 @@ function renderMijnTaken() {
     // Calculate totaal taakuren
     let totaalTaakuren = 0;
 
+    // Get docent for FTE calculation
+    const docent = state.docenten.find(d => d.id === state.geselecteerdeDocent);
+    const nettoFTE = docent ? (docent.aanstellingBruto ?? 1.0) - (docent.inhouding ?? 0) : 1.0;
+
     container.innerHTML = mijnTaken.map(taak => {
-        const totaalUren = Object.values(taak.urenPerPeriode).reduce((a, b) => a + b, 0);
+        let totaalUren = Object.values(taak.urenPerPeriode).reduce((a, b) => a + b, 0);
+        // Apply naarRato if set
+        if (taak.naarRato) {
+            totaalUren = totaalUren * nettoFTE;
+        }
         totaalTaakuren += totaalUren;
         const kleur = taak.kleur || '#6366f1';
         const isVoorIedereen = taak.voorIedereen;
@@ -2936,14 +4376,20 @@ function renderMijnTaken() {
         const exactVerschil = taak.exactDocenten ? totaalAantalDocenten - taak.exactDocenten : 0;
 
         // Build constraint text for header
-        let constraintText = '';
+        const constraints = [];
         if (isVoorIedereen) {
-            constraintText = '<span class="max-docenten-info">(taak voor alle teamleden)</span>';
+            constraints.push('voor alle teamleden');
         } else if (taak.exactDocenten) {
-            constraintText = `<span class="max-docenten-info">(exact ${taak.exactDocenten} ${taak.exactDocenten === 1 ? 'teamlid' : 'teamleden'})</span>`;
+            constraints.push(`exact ${taak.exactDocenten} ${taak.exactDocenten === 1 ? 'teamlid' : 'teamleden'}`);
         } else if (taak.maxDocenten) {
-            constraintText = `<span class="max-docenten-info">(max ${taak.maxDocenten} ${taak.maxDocenten === 1 ? 'teamlid' : 'teamleden'})</span>`;
+            constraints.push(`max ${taak.maxDocenten} ${taak.maxDocenten === 1 ? 'teamlid' : 'teamleden'}`);
         }
+        if (taak.naarRato) {
+            constraints.push('naar rato');
+        }
+        const constraintText = constraints.length > 0
+            ? `<span class="max-docenten-info">(${constraints.join('; ')})</span>`
+            : '';
 
         // Build docenten text with warnings
         let docentenText = '';
@@ -3178,22 +4624,67 @@ function renderDashboardPvi() {
     const container = document.getElementById('dashboard-pvi-grid');
 
     if (state.docenten.length === 0) {
-        container.innerHTML = '<p class="empty-state">Voeg docenten toe om het overzicht te zien</p>';
+        container.innerHTML = '<p class="empty-state">Voeg teamleden toe om het overzicht te zien</p>';
         return;
     }
 
     const BESCHIKBAAR_PER_FTE = 1600;
     const allBlokjes = generateAllBlokjes();
 
-    // Sort docenten by second letter onwards (same as Teamledenbeheer)
+    // Sort docenten by second letter onwards
     const sortedDocenten = [...state.docenten].sort((a, b) =>
         a.naam.substring(1).localeCompare(b.naam.substring(1))
     );
 
-    container.innerHTML = sortedDocenten.map(docent => {
-        const initials = docent.naam.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    // Collect all unique taken
+    const alleTaken = [...state.taken].sort((a, b) => a.naam.localeCompare(b.naam, 'nl'));
 
-        // Calculate FTE-based availability
+    // Build table header - group header for sections
+    let groupHeaderHtml = '<tr class="pvi-group-header-row">';
+    groupHeaderHtml += '<th></th>'; // Teamlid
+    groupHeaderHtml += '<th colspan="6" class="pvi-group-blue">Aanstelling</th>';
+    groupHeaderHtml += '<th colspan="2" class="pvi-group-orange">Inzet</th>';
+    groupHeaderHtml += '<th colspan="3" class="pvi-group-calc">Berekening</th>';
+    groupHeaderHtml += '<th colspan="5" class="pvi-group-yellow">Lessen (eenheden)</th>';
+    groupHeaderHtml += '<th class="pvi-group-taken">Taken (klokuren)</th>';
+    groupHeaderHtml += '</tr>';
+
+    // Build table header - column headers
+    let headerHtml = '<tr class="pvi-header-row">';
+    headerHtml += '<th class="pvi-naam-header">Teamlid</th>';
+
+    // Sectie 1: FTE Info (blauw)
+    headerHtml += '<th class="pvi-section-blue">Bruto FTE</th>';
+    headerHtml += '<th class="pvi-section-blue">Inhouding</th>';
+    headerHtml += '<th class="pvi-section-blue">Netto FTE</th>';
+    headerHtml += '<th class="pvi-section-blue">Netto uren</th>';
+    headerHtml += '<th class="pvi-section-blue">75% Onderwijs</th>';
+    headerHtml += '<th class="pvi-section-blue">25% Taken</th>';
+
+    // Sectie 2: Inzet (oranje)
+    headerHtml += '<th class="pvi-section-orange">Inzet onderwijs</th>';
+    headerHtml += '<th class="pvi-section-orange">Inzet taken</th>';
+
+    // Sectie 3: Berekening
+    headerHtml += '<th class="pvi-section-calc">Δ Onderwijs</th>';
+    headerHtml += '<th class="pvi-section-calc">Δ Taken</th>';
+    headerHtml += '<th class="pvi-section-calc">Verschil</th>';
+
+    // Sectie 4: Lessen samenvatting per periode (geel)
+    headerHtml += '<th class="pvi-section-yellow">P1</th>';
+    headerHtml += '<th class="pvi-section-yellow">P2</th>';
+    headerHtml += '<th class="pvi-section-yellow">P3</th>';
+    headerHtml += '<th class="pvi-section-yellow">P4</th>';
+    headerHtml += '<th class="pvi-section-yellow">OW</th>';
+
+    // Sectie 5: Taken samenvatting
+    headerHtml += '<th class="pvi-section-taken">Samenvatting</th>';
+
+    headerHtml += '</tr>';
+
+    // Build rows per docent
+    let rowsHtml = sortedDocenten.map(docent => {
+        // FTE calculations
         const brutoFTE = docent.aanstellingBruto ?? 1.0;
         const inhouding = docent.inhouding ?? 0;
         const nettoFTE = brutoFTE - inhouding;
@@ -3201,7 +4692,7 @@ function renderDashboardPvi() {
         const onderwijsBeschikbaar = beschikbareUren * 0.75;
         const takenBeschikbaar = beschikbareUren * 0.25;
 
-        // Calculate selected onderwijs hours
+        // Get docent toewijzingen
         const docentToewijzingen = state.toewijzingen.filter(t => t.docentId === docent.id);
         let onderwijsGeselecteerd = 0;
 
@@ -3213,22 +4704,21 @@ function renderDashboardPvi() {
             const periodeBlokjes = docentToewijzingen
                 .filter(t => {
                     const pStr = t.periode?.toString() || '';
-                    return pStr === `P${periode}` || pStr === String(periode);
+                    return pStr === 'P' + periode || pStr === String(periode);
                 })
                 .map(t => allBlokjes.find(b => b.id === t.blokjeId))
                 .filter(b => b);
 
             const ow1Blokjes = docentToewijzingen
-                .filter(t => t.periode === `OW${ow1}`)
+                .filter(t => t.periode === 'OW' + ow1)
                 .map(t => allBlokjes.find(b => b.id === t.blokjeId))
                 .filter(b => b);
 
             const ow2Blokjes = docentToewijzingen
-                .filter(t => t.periode === `OW${ow2}`)
+                .filter(t => t.periode === 'OW' + ow2)
                 .map(t => allBlokjes.find(b => b.id === t.blokjeId))
                 .filter(b => b);
 
-            // Calculate hours (including VZNZ)
             periodeBlokjes.forEach(b => {
                 const vak = state.vakken.find(v => v.id === b.vakId);
                 const factor = vak ? (vak.opslagfactor || 40) : 40;
@@ -3241,7 +4731,7 @@ function renderDashboardPvi() {
             });
         });
 
-        // Calculate selected taak hours
+        // Calculate taken geselecteerd
         let takenGeselecteerd = 0;
         const mijnTaken = state.taken.filter(taak => {
             if (taak.voorIedereen) return true;
@@ -3249,7 +4739,11 @@ function renderDashboardPvi() {
         });
 
         mijnTaken.forEach(taak => {
-            takenGeselecteerd += Object.values(taak.urenPerPeriode).reduce((a, b) => a + b, 0);
+            let uren = Object.values(taak.urenPerPeriode).reduce((a, b) => a + b, 0);
+            if (taak.naarRato) {
+                uren = uren * nettoFTE;
+            }
+            takenGeselecteerd += uren;
         });
 
         // Calculate differences
@@ -3257,39 +4751,354 @@ function renderDashboardPvi() {
         const takenVerschil = takenBeschikbaar - takenGeselecteerd;
         const totaalVerschil = onderwijsVerschil + takenVerschil;
 
-        // Determine verschil class
-        let verschilClass = 'nul';
-        if (totaalVerschil > 0.5) verschilClass = 'positief';
-        else if (totaalVerschil < -0.5) verschilClass = 'negatief';
+        // Format verschil with class
+        const formatVerschil = (val) => {
+            const cls = val >= 0 ? 'pvi-positief' : 'pvi-negatief';
+            const sign = val >= 0 ? '+' : '';
+            return '<span class="' + cls + '">' + sign + val.toFixed(1) + '</span>';
+        };
 
-        const verschilText = totaalVerschil >= 0 ? `+${totaalVerschil.toFixed(0)}u` : `${totaalVerschil.toFixed(0)}u`;
+        // Build lesson summaries per period - grouped by leerjaar
+        const buildLessenSummary = (periodeFilter) => {
+            const lessenMap = {};
+            docentToewijzingen.filter(periodeFilter).forEach(t => {
+                const blokje = allBlokjes.find(b => b.id === t.blokjeId);
+                if (!blokje) return;
+                const vak = state.vakken.find(v => v.id === blokje.vakId);
+                if (!vak) return;
+                const leerjaar = vak.leerjaar || '';
+                const key = vak.naam + ' ' + blokje.klas;
+                if (!lessenMap[leerjaar]) lessenMap[leerjaar] = {};
+                lessenMap[leerjaar][key] = (lessenMap[leerjaar][key] || 0) + 1;
+            });
 
-        return `
-            <div class="pvi-extended-card">
-                <div class="pvi-extended-header">
-                    <div class="pvi-extended-avatar">${initials}</div>
-                    <div class="pvi-extended-naam">${escapeHtml(docent.naam)}</div>
-                </div>
-                <div class="pvi-extended-content">
-                    <div class="pvi-extended-row">
-                        <span class="pvi-extended-label">🎓 Onderwijs</span>
-                        <span class="pvi-extended-beschikbaar">${onderwijsBeschikbaar.toFixed(0)}u</span>
-                        <span class="pvi-extended-geselecteerd">${onderwijsGeselecteerd.toFixed(0)}u</span>
-                    </div>
-                    <div class="pvi-extended-row">
-                        <span class="pvi-extended-label">✅ Taken</span>
-                        <span class="pvi-extended-beschikbaar">${takenBeschikbaar.toFixed(0)}u</span>
-                        <span class="pvi-extended-geselecteerd">${takenGeselecteerd.toFixed(0)}u</span>
-                    </div>
-                    <div class="pvi-extended-verschil ${verschilClass}">
-                        <span>Verschil</span>
-                        <span>${verschilText}</span>
-                    </div>
-                </div>
-            </div>
-        `;
+            // Sort leerjaren and build output with separators
+            const sortedLeerjaren = Object.keys(lessenMap).sort((a, b) => a.localeCompare(b, 'nl', { numeric: true }));
+            return sortedLeerjaren.map(lj => {
+                return Object.entries(lessenMap[lj])
+                    .sort((a, b) => a[0].localeCompare(b[0], 'nl', { numeric: true }))
+                    .map(([les, cnt]) => les + ' (' + cnt + ')')
+                    .join('<br>');
+            }).join('<hr class="pvi-sep">');
+        };
+
+        const p1Summary = buildLessenSummary(t => t.periode === 'P1' || t.periode === '1');
+        const p2Summary = buildLessenSummary(t => t.periode === 'P2' || t.periode === '2');
+        const p3Summary = buildLessenSummary(t => t.periode === 'P3' || t.periode === '3');
+        const p4Summary = buildLessenSummary(t => t.periode === 'P4' || t.periode === '4');
+        const owSummary = buildLessenSummary(t => t.periode && t.periode.toString().startsWith('OW'));
+
+        // Build row
+        let row = '<tr class="pvi-data-row">';
+        row += '<td class="pvi-naam-cel">' + escapeHtml(docent.naam) + '</td>';
+
+        // Sectie 1: FTE
+        row += '<td class="pvi-blue">' + brutoFTE.toFixed(2) + '</td>';
+        row += '<td class="pvi-blue">' + inhouding.toFixed(2) + '</td>';
+        row += '<td class="pvi-blue">' + nettoFTE.toFixed(2) + '</td>';
+        row += '<td class="pvi-blue">' + beschikbareUren.toFixed(0) + '</td>';
+        row += '<td class="pvi-blue">' + onderwijsBeschikbaar.toFixed(0) + '</td>';
+        row += '<td class="pvi-blue">' + takenBeschikbaar.toFixed(0) + '</td>';
+
+        // Sectie 2: Inzet
+        row += '<td class="pvi-orange">' + onderwijsGeselecteerd.toFixed(1) + '</td>';
+        row += '<td class="pvi-orange">' + takenGeselecteerd.toFixed(1) + '</td>';
+
+        // Sectie 3: Berekening
+        row += '<td class="pvi-calc">' + formatVerschil(onderwijsVerschil) + '</td>';
+        row += '<td class="pvi-calc">' + formatVerschil(takenVerschil) + '</td>';
+        row += '<td class="pvi-calc pvi-verschil-totaal">' + formatVerschil(totaalVerschil) + '</td>';
+
+        // Sectie 4: Lessen samenvatting per periode
+        row += '<td class="pvi-yellow pvi-summary">' + p1Summary + '</td>';
+        row += '<td class="pvi-yellow pvi-summary">' + p2Summary + '</td>';
+        row += '<td class="pvi-yellow pvi-summary">' + p3Summary + '</td>';
+        row += '<td class="pvi-yellow pvi-summary">' + p4Summary + '</td>';
+        row += '<td class="pvi-yellow pvi-summary">' + owSummary + '</td>';
+
+        // Sectie 5: Taken samenvatting
+        const takenSummary = mijnTaken
+            .map(taak => {
+                let uren = Object.values(taak.urenPerPeriode).reduce((a, b) => a + b, 0);
+                if (taak.naarRato) {
+                    uren = uren * nettoFTE;
+                }
+                return taak.naam + ' (' + uren.toFixed(1) + ')';
+            })
+            .join(', ');
+        row += '<td class="pvi-taken pvi-summary">' + escapeHtml(takenSummary) + '</td>';
+
+        row += '</tr>';
+        return row;
     }).join('');
+
+    // Build complete table
+    container.innerHTML = '<div class="pvi-tabel-container"><table class="pvi-tabel"><thead>' + groupHeaderHtml + headerHtml + '</thead><tbody>' + rowsHtml + '</tbody></table></div>';
 }
+
+// ============================================
+// EXCEL EXPORT FOR PVI TABLE
+// ============================================
+
+function exportPviToExcel() {
+    if (!window.XLSX) {
+        alert('Excel export library niet geladen. Controleer je internetverbinding.');
+        return;
+    }
+
+    const allBlokjes = generateAllBlokjes();
+    const sortedDocenten = [...state.docenten].sort((a, b) => a.naam.localeCompare(b.naam, 'nl'));
+
+    if (sortedDocenten.length === 0) {
+        alert('Geen docenten om te exporteren.');
+        return;
+    }
+
+    // Build data rows
+    const data = [];
+
+    // Header rows
+    const groupHeader = ['', 'FTE Berekening', '', '', '', '', '', 'Inzet (u)', '', 'Verschil', '', '', 'Lessen per Periode', '', '', '', '', 'Taken'];
+    const header = ['Docent', 'Bruto FTE', 'Inhouding', 'Netto FTE', 'Beschikb. (u)', 'Onderwijs (u)', 'Taken (u)', 'Onderwijs', 'Taken', 'Onderwijs', 'Taken', 'Totaal', 'P1', 'P2', 'P3', 'P4', 'OW', 'Toegewezen'];
+    data.push(groupHeader);
+    data.push(header);
+
+    // Color mappings for columns
+    const colorsPerColumn = {
+        0: null, // Naam
+        1: '3B82F6', 2: '3B82F6', 3: '3B82F6', 4: '3B82F6', 5: '3B82F6', 6: '3B82F6', // Blue FTE
+        7: 'F59E0B', 8: 'F59E0B', // Orange Inzet
+        9: null, 10: null, 11: null, // Verschil - will be colored by value
+        12: '8B5CF6', 13: '8B5CF6', 14: '8B5CF6', 15: '8B5CF6', 16: '8B5CF6', // Purple Lessen
+        17: '14B8A6' // Teal Taken
+    };
+
+    // Build docent rows
+    sortedDocenten.forEach(docent => {
+        const docentToewijzingen = state.toewijzingen.filter(t => t.docentId === docent.id);
+        const mijnTaken = state.taken.filter(taak =>
+            taak.voorIedereen ||
+            state.docentTaken.some(dt => dt.docentId === docent.id && dt.taakId === taak.id)
+        );
+
+        const brutoFTE = docent.fte || 1;
+        const inhouding = docent.inhouding || 0;
+        const nettoFTE = brutoFTE - inhouding;
+        const beschikbareUren = nettoFTE * 1659;
+        const onderwijsBeschikbaar = beschikbareUren * 0.75;
+        const takenBeschikbaar = beschikbareUren * 0.25;
+
+        // Calculate onderwijs geselecteerd
+        let onderwijsGeselecteerd = 0;
+        docentToewijzingen.forEach(t => {
+            const blokje = allBlokjes.find(b => b.id === t.blokjeId);
+            if (blokje) onderwijsGeselecteerd += blokje.klokuren || 0;
+        });
+
+        // Calculate taken geselecteerd
+        let takenGeselecteerd = 0;
+        mijnTaken.forEach(taak => {
+            let uren = Object.values(taak.urenPerPeriode || { 1: 0, 2: 0, 3: 0, 4: 0 }).reduce((a, b) => a + b, 0);
+            if (taak.naarRato) uren = uren * nettoFTE;
+            takenGeselecteerd += uren;
+        });
+
+        const onderwijsVerschil = onderwijsBeschikbaar - onderwijsGeselecteerd;
+        const takenVerschil = takenBeschikbaar - takenGeselecteerd;
+        const totaalVerschil = beschikbareUren - (onderwijsGeselecteerd + takenGeselecteerd);
+
+        // Build lessen summaries per period (with newlines instead of <br>)
+        const buildLessenSummary = (periodeFilter) => {
+            const lessenMap = {};
+            docentToewijzingen.filter(periodeFilter).forEach(t => {
+                const blokje = allBlokjes.find(b => b.id === t.blokjeId);
+                if (!blokje) return;
+                const vak = state.vakken.find(v => v.id === blokje.vakId);
+                if (!vak) return;
+                const leerjaar = vak.leerjaar || '';
+                const key = vak.naam + ' ' + blokje.klas;
+                if (!lessenMap[leerjaar]) lessenMap[leerjaar] = {};
+                lessenMap[leerjaar][key] = (lessenMap[leerjaar][key] || 0) + 1;
+            });
+
+            const sortedLeerjaren = Object.keys(lessenMap).sort((a, b) => a.localeCompare(b, 'nl', { numeric: true }));
+            return sortedLeerjaren.map(lj => {
+                return Object.entries(lessenMap[lj])
+                    .sort((a, b) => a[0].localeCompare(b[0], 'nl', { numeric: true }))
+                    .map(([les, cnt]) => les + ' (' + cnt + ')')
+                    .join('\n');
+            }).join('\n\n'); // Double newline between leerjaren
+        };
+
+        const p1Summary = buildLessenSummary(t => t.periode === 'P1' || t.periode === '1');
+        const p2Summary = buildLessenSummary(t => t.periode === 'P2' || t.periode === '2');
+        const p3Summary = buildLessenSummary(t => t.periode === 'P3' || t.periode === '3');
+        const p4Summary = buildLessenSummary(t => t.periode === 'P4' || t.periode === '4');
+        const owSummary = buildLessenSummary(t => t.periode && t.periode.toString().startsWith('OW'));
+
+        // Build taken summary
+        const takenSummary = mijnTaken.map(taak => {
+            let uren = Object.values(taak.urenPerPeriode || { 1: 0, 2: 0, 3: 0, 4: 0 }).reduce((a, b) => a + b, 0);
+            if (taak.naarRato) uren = uren * nettoFTE;
+            return taak.naam + ' (' + uren.toFixed(1) + ')';
+        }).join('\n');
+
+        const row = [
+            docent.naam,
+            brutoFTE,
+            inhouding,
+            nettoFTE,
+            Math.round(beschikbareUren),
+            Math.round(onderwijsBeschikbaar),
+            Math.round(takenBeschikbaar),
+            onderwijsGeselecteerd,
+            takenGeselecteerd,
+            onderwijsVerschil,
+            takenVerschil,
+            totaalVerschil,
+            p1Summary,
+            p2Summary,
+            p3Summary,
+            p4Summary,
+            owSummary,
+            takenSummary
+        ];
+
+        data.push(row);
+    });
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Calculate auto-fit column widths based on content
+    const colWidths = [];
+    data.forEach((row, rowIdx) => {
+        row.forEach((cell, colIdx) => {
+            const cellValue = cell ? cell.toString() : '';
+            // For multiline cells, get the longest line
+            const lines = cellValue.split('\n');
+            const maxLineLength = Math.max(...lines.map(l => l.length));
+            // Add some padding
+            const width = Math.min(Math.max(maxLineLength + 2, 8), 50);
+            if (!colWidths[colIdx] || width > colWidths[colIdx]) {
+                colWidths[colIdx] = width;
+            }
+        });
+    });
+
+    // Set column widths
+    ws['!cols'] = colWidths.map(w => ({ wch: w }));
+
+    // Apply row heights for header rows
+    ws['!rows'] = [
+        { hpt: 25 }, // Group header
+        { hpt: 30 }  // Column header
+    ];
+
+    // Apply cell styles (borders, bold headers, colors)
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    // Define border style
+    const thinBorder = {
+        top: { style: 'thin', color: { rgb: '000000' } },
+        bottom: { style: 'thin', color: { rgb: '000000' } },
+        left: { style: 'thin', color: { rgb: '000000' } },
+        right: { style: 'thin', color: { rgb: '000000' } }
+    };
+
+    // Apply styles to each cell
+    for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+            const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+            if (!ws[cellRef]) {
+                ws[cellRef] = { v: '', t: 's' };
+            }
+
+            // Initialize cell style
+            if (!ws[cellRef].s) ws[cellRef].s = {};
+
+            // Apply borders to all cells
+            ws[cellRef].s.border = thinBorder;
+
+            // Header rows (0 and 1)
+            if (R === 0 || R === 1) {
+                ws[cellRef].s.font = { bold: true, color: { rgb: 'FFFFFF' } };
+                ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center', wrapText: true };
+
+                // Group header colors based on column
+                if (R === 0) {
+                    if (C >= 1 && C <= 6) {
+                        ws[cellRef].s.fill = { fgColor: { rgb: '3B82F6' } }; // Blue - FTE
+                    } else if (C >= 7 && C <= 8) {
+                        ws[cellRef].s.fill = { fgColor: { rgb: 'F59E0B' } }; // Orange - Inzet
+                    } else if (C >= 9 && C <= 11) {
+                        ws[cellRef].s.fill = { fgColor: { rgb: '6B7280' } }; // Gray - Verschil
+                    } else if (C >= 12 && C <= 16) {
+                        ws[cellRef].s.fill = { fgColor: { rgb: '8B5CF6' } }; // Purple - Lessen
+                    } else if (C === 17) {
+                        ws[cellRef].s.fill = { fgColor: { rgb: '14B8A6' } }; // Teal - Taken
+                    } else {
+                        ws[cellRef].s.fill = { fgColor: { rgb: '374151' } }; // Dark gray
+                    }
+                }
+
+                // Column header
+                if (R === 1) {
+                    if (C >= 1 && C <= 6) {
+                        ws[cellRef].s.fill = { fgColor: { rgb: '60A5FA' } }; // Lighter blue
+                    } else if (C >= 7 && C <= 8) {
+                        ws[cellRef].s.fill = { fgColor: { rgb: 'FBBF24' } }; // Lighter orange
+                    } else if (C >= 9 && C <= 11) {
+                        ws[cellRef].s.fill = { fgColor: { rgb: '9CA3AF' } }; // Lighter gray
+                    } else if (C >= 12 && C <= 16) {
+                        ws[cellRef].s.fill = { fgColor: { rgb: 'A78BFA' } }; // Lighter purple
+                    } else if (C === 17) {
+                        ws[cellRef].s.fill = { fgColor: { rgb: '2DD4BF' } }; // Lighter teal
+                    } else {
+                        ws[cellRef].s.fill = { fgColor: { rgb: '4B5563' } }; // Medium gray
+                    }
+                }
+            } else {
+                // Data rows
+                ws[cellRef].s.alignment = { vertical: 'top', wrapText: true };
+
+                // Verschil columns - color based on value
+                if (C >= 9 && C <= 11) {
+                    const cellValue = ws[cellRef].v;
+                    if (typeof cellValue === 'number') {
+                        if (cellValue >= 0) {
+                            ws[cellRef].s.font = { color: { rgb: '10B981' } }; // Green
+                        } else {
+                            ws[cellRef].s.font = { color: { rgb: 'EF4444' } }; // Red
+                        }
+                    }
+                }
+
+                // Light background colors for sections
+                if (C >= 1 && C <= 6) {
+                    ws[cellRef].s.fill = { fgColor: { rgb: 'EFF6FF' } }; // Very light blue
+                } else if (C >= 7 && C <= 8) {
+                    ws[cellRef].s.fill = { fgColor: { rgb: 'FEF3C7' } }; // Very light orange
+                } else if (C >= 12 && C <= 16) {
+                    ws[cellRef].s.fill = { fgColor: { rgb: 'F5F3FF' } }; // Very light purple
+                } else if (C === 17) {
+                    ws[cellRef].s.fill = { fgColor: { rgb: 'F0FDFA' } }; // Very light teal
+                }
+            }
+        }
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Dummy PvI');
+
+    // Generate filename with date
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `Werkverdelingsapp_PvI_${dateStr}.xlsx`;
+
+    // Download - use bookType xlsx with cellStyles
+    XLSX.writeFile(wb, filename, { cellStyles: true });
+}
+
 
 // ============================================
 // NIVEAU 1: LESSEN COMPACT OVERVIEW
@@ -3937,12 +5746,14 @@ function updateTakenProgressBar() {
 // ============================================
 
 function initExport() {
-    document.getElementById('btn-export').addEventListener('click', exportData);
-    document.getElementById('btn-save').addEventListener('click', () => {
+    // Note: btn-export, btn-save, btn-reset may no longer exist (moved to Admin panel)
+    // Using optional chaining to prevent errors
+    document.getElementById('btn-export')?.addEventListener('click', exportData);
+    document.getElementById('btn-save')?.addEventListener('click', () => {
         saveToLocalStorage();
         alert('Data opgeslagen!');
     });
-    document.getElementById('btn-reset').addEventListener('click', () => {
+    document.getElementById('btn-reset')?.addEventListener('click', () => {
         if (confirm('⚠️ WAARSCHUWING: Alle gegevens worden gewist!\n\nDit verwijdert alle leerjaren, vakken, docenten en toewijzingen.\n\nWeet je het zeker?')) {
             localStorage.removeItem('werkverdelingsapp-state');
             alert('Alle data is gewist. De pagina wordt nu herladen.');
@@ -4064,9 +5875,10 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTakenSelectie();
     updateDocentSelector();
     updateLeerjaarSelector();
+    renderSavedStates(); // Admin panel
 
-    // Check role and show role selection modal if needed
-    checkRoleOnLoad();
+    // Initialize Firebase Authentication
+    initFirebaseAuth();
 
     console.log('Werkverdelingsapp initialized!');
 });
@@ -4091,3 +5903,32 @@ window.closeEditLeerjaarModal = closeEditLeerjaarModal;
 window.saveEditLeerjaar = saveEditLeerjaar;
 window.addKlasToLeerjaar = addKlasToLeerjaar;
 window.removeKlasFromLeerjaar = removeKlasFromLeerjaar;
+
+// Admin panel functions
+window.saveNamedState = saveNamedState;
+window.loadNamedState = loadNamedState;
+window.deleteNamedState = deleteNamedState;
+window.exportToFile = exportToFile;
+window.importFromFile = importFromFile;
+window.resetAllData = resetAllData;
+window.exportPviToExcel = exportPviToExcel;
+
+// Authentication functions
+window.handleLogin = handleLogin;
+window.handleLogout = handleLogout;
+window.showForgotPassword = showForgotPassword;
+window.closeForgotPasswordModal = closeForgotPasswordModal;
+window.handleForgotPassword = handleForgotPassword;
+
+// Firestore save state functions
+window.createSaveStateFirestore = createSaveStateFirestore;
+window.loadSaveStateFirestore = loadSaveStateFirestore;
+window.deleteSaveStateFirestore = deleteSaveStateFirestore;
+window.smartSaveState = smartSaveState;
+
+// User management functions
+window.createNewUser = createNewUser;
+
+// Admin functions
+window.switchActiveTeam = switchActiveTeam;
+window.createNewTeam = createNewTeam;

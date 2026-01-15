@@ -9,6 +9,65 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-auth.js";
+        import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAOHctdc5qdXHXHf7AcizdsrQTNMmaKzaM",
+            authDomain: "werkverdelingsapp.firebaseapp.com",
+            projectId: "werkverdelingsapp",
+            storageBucket: "werkverdelingsapp.firebasestorage.app",
+            messagingSenderId: "593028785916",
+            appId: "1:593028785916:web:80f5a830a058994decd979",
+            measurementId: "G-6EJBW4QG7B"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Expose Firebase to global scope for use in app.js
+        window.firebaseApp = app;
+        window.firebaseAuth = auth;
+        window.firebaseDb = db;
+
+        // Expose Firebase functions globally
+        window.firebaseFunctions = {
+            // Auth functions
+            signInWithEmailAndPassword,
+            signOut,
+            onAuthStateChanged,
+            createUserWithEmailAndPassword,
+            sendPasswordResetEmail,
+            // Firestore functions
+            collection,
+            doc,
+            getDoc,
+            getDocs,
+            setDoc,
+            updateDoc,
+            deleteDoc,
+            onSnapshot,
+            query,
+            where
+        };
+
+        // Signal that Firebase is ready
+        window.firebaseReady = true;
+        window.dispatchEvent(new Event('firebase-ready'));
+
+        console.log('Firebase initialized successfully!');
+    </script>
+
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 </head>
 
 <body>
@@ -20,7 +79,11 @@
                 <h1>Werkverdelingsapp</h1>
             </div>
             <div class="nav-tabs">
-                <button class="nav-tab active" data-view="curriculum" data-role="admin">
+                <button class="nav-tab active" data-view="admin" data-role="admin">
+                    <span class="tab-icon">⚙️</span>
+                    Admin
+                </button>
+                <button class="nav-tab" data-view="curriculum" data-role="admin">
                     <span class="tab-icon">📚</span>
                     Lessenbeheer
                 </button>
@@ -48,19 +111,147 @@
                     <span class="tab-icon">📊</span>
                     Dashboard
                 </button>
-            </div>
-            <div class="nav-actions">
-                <button class="btn-icon" id="btn-reset" title="Reset alle data">🗑️</button>
-                <button class="btn-icon" id="btn-save" title="Opslaan">💾</button>
-                <button class="btn-icon" id="btn-export" title="Exporteren">📤</button>
+                <button class="nav-tab nav-tab-logout" id="btn-logout" onclick="handleLogout()" title="Uitloggen">
+                    <span class="tab-icon">�</span>
+                    Uitloggen
+                </button>
             </div>
         </nav>
 
         <!-- Main Content -->
         <main class="main-content">
 
+            <!-- Admin View -->
+            <section class="view active" id="view-admin">
+                <div class="view-header admin-view-header">
+                    <div>
+                        <h2>⚙️ Beheer</h2>
+                        <p class="view-subtitle">Opslaan, laden en exporteren van werkverdelingsdata</p>
+                    </div>
+                    <!-- Team Switcher (only for admins) -->
+                    <div class="team-switcher" id="team-switcher" style="display: none;">
+                        <label>Actief team:</label>
+                        <select id="active-team-select" onchange="switchActiveTeam(this.value)">
+                            <option value="">-- Selecteer team --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="admin-layout">
+                    <!-- Save States -->
+                    <div class="card admin-card">
+                        <h3>💾 Opgeslagen States</h3>
+                        <p class="card-hint">Maak snapshots van je huidige data en laad ze later weer in.</p>
+
+                        <div class="admin-save-form">
+                            <div class="form-row">
+                                <input type="text" id="save-state-name"
+                                    placeholder="Naam voor deze state (bijv. 'Backup januari')">
+                                <button class="btn btn-primary" onclick="smartSaveState()">
+                                    <span>💾</span> State Opslaan
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="saved-states-list" class="saved-states-list">
+                            <p class="empty-state">Geen opgeslagen states</p>
+                        </div>
+                    </div>
+
+                    <!-- Import/Export -->
+                    <div class="card admin-card">
+                        <h3>📤 Importeren / Exporteren</h3>
+                        <p class="card-hint">Exporteer data naar JSON bestand of importeer eerder geëxporteerde data.
+                        </p>
+
+                        <div class="admin-actions-grid">
+                            <div class="admin-action-item">
+                                <h4>Exporteren</h4>
+                                <p>Download de huidige data als JSON bestand</p>
+                                <button class="btn btn-secondary" onclick="exportToFile()">
+                                    <span>📥</span> Download JSON
+                                </button>
+                            </div>
+                            <div class="admin-action-item">
+                                <h4>Importeren</h4>
+                                <p>Laad data uit een eerder geëxporteerd JSON bestand</p>
+                                <input type="file" id="import-file-input" accept=".json" style="display:none"
+                                    onchange="importFromFile(event)">
+                                <button class="btn btn-secondary"
+                                    onclick="document.getElementById('import-file-input').click()">
+                                    <span>📤</span> Importeer JSON
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Team Management -->
+                    <div class="card admin-card">
+                        <h3>🏢 Teambeheer</h3>
+                        <p class="card-hint">Maak nieuwe teams aan of bekijk bestaande teams.</p>
+
+                        <div class="admin-team-form">
+                            <div class="form-row">
+                                <input type="text" id="new-team-id" placeholder="Team ID (bijv. CMD)">
+                                <input type="text" id="new-team-name"
+                                    placeholder="Team naam (bijv. Communicatie & Media Design)">
+                                <button class="btn btn-primary btn-sm" onclick="createNewTeam()">
+                                    <span>➕</span> Team Aanmaken
+                                </button>
+                            </div>
+                        </div>
+
+                        <h4 style="margin-top: var(--space-lg);">Bestaande teams</h4>
+                        <div id="teams-list" class="teams-list">
+                            <p class="empty-state">Laden...</p>
+                        </div>
+                    </div>
+
+                    <!-- User Management -->
+                    <div class="card admin-card">
+                        <h3>👥 Gebruikersbeheer</h3>
+                        <p class="card-hint">Voeg nieuwe gebruikers toe en beheer teamtoewijzingen.</p>
+
+                        <div class="admin-user-form">
+                            <div class="form-row">
+                                <input type="email" id="new-user-email" placeholder="E-mailadres">
+                                <input type="password" id="new-user-password" placeholder="Wachtwoord (min. 6 tekens)">
+                            </div>
+                            <div class="form-row">
+                                <input type="text" id="new-user-afkorting" placeholder="Afkorting (bijv. fwals)">
+                            </div>
+                            <div class="form-row">
+                                <select id="new-user-team">
+                                    <option value="">-- Selecteer team --</option>
+                                </select>
+                                <select id="new-user-role">
+                                    <option value="teamlid">Teamlid</option>
+                                    <option value="teamleider">Teamleider</option>
+                                    <option value="onderwijsplanner">Onderwijsplanner</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <input type="number" id="new-user-fte" placeholder="FTE (bijv. 0.8)" step="0.1" min="0"
+                                    max="1.5">
+                                <input type="text" id="new-user-docenttype"
+                                    placeholder="Docenttype (bijv. AVO: Nederlands)">
+                            </div>
+                            <button class="btn btn-primary" onclick="createNewUser()">
+                                <span>➕</span> Gebruiker Toevoegen
+                            </button>
+                        </div>
+
+                        <h4 style="margin-top: var(--space-lg);">Bestaande gebruikers</h4>
+                        <div id="users-list" class="users-list">
+                            <p class="empty-state">Laden...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Curriculum View -->
-            <section class="view active" id="view-curriculum">
+            <section class="view" id="view-curriculum">
 
                 <div class="curriculum-layout">
                     <!-- Left column: Forms -->
@@ -93,9 +284,7 @@
                                         <input type="number" id="basisweken-p4" min="1" max="20" value="8">
                                     </div>
                                 </div>
-                                <button type="button" id="btn-save-basisweken" class="btn btn-secondary btn-sm">
-                                    <span>💾</span> Opslaan
-                                </button>
+                                <small class="form-hint">Waarden worden automatisch opgeslagen bij wijziging</small>
                             </div>
                         </div>
 
@@ -337,9 +526,7 @@
                                             <input type="number" id="weken-p4" min="1" max="20" value="10">
                                         </div>
                                     </div>
-                                    <button type="submit" class="btn btn-secondary btn-sm">
-                                        <span>💾</span> Opslaan
-                                    </button>
+                                    <small class="form-hint">Waarden worden automatisch opgeslagen bij wijziging</small>
                                 </form>
                             </div>
                         </div>
@@ -382,6 +569,13 @@
                                 <div class="form-group">
                                     <label for="taak-totaal-uren">Taaktijd (in klokuren)</label>
                                     <input type="number" id="taak-totaal-uren" min="0" step="0.5" value="0" required>
+                                </div>
+
+                                <div class="form-group checkbox-inline">
+                                    <input type="checkbox" id="taak-naar-rato">
+                                    <label for="taak-naar-rato">Naar rato (uren × netto FTE)</label>
+                                    <small class="form-hint">Wanneer aangevinkt worden de uren vermenigvuldigd met de
+                                        netto FTE van het teamlid</small>
                                 </div>
 
                                 <div class="form-group">
@@ -434,17 +628,6 @@
 
                                 <div class="form-group checkbox-group">
                                     <label class="checkbox-label">
-                                        <input type="checkbox" id="taak-max-docenten-check">
-                                        <span>Maximaal aantal teamleden voor deze taak</span>
-                                    </label>
-                                    <div id="taak-max-docenten-container" style="display: none; margin-top: 0.5rem;">
-                                        <input type="number" id="taak-max-docenten" min="1" value="1"
-                                            style="width: 80px;">
-                                    </div>
-                                </div>
-
-                                <div class="form-group checkbox-group">
-                                    <label class="checkbox-label">
                                         <input type="checkbox" id="taak-exact-docenten-check">
                                         <span>Exact aantal teamleden voor deze taak</span>
                                     </label>
@@ -454,7 +637,18 @@
                                     </div>
                                 </div>
 
-                                <button type="submit" class="btn btn-primary">
+                                <div class="form-group checkbox-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="taak-max-docenten-check">
+                                        <span>Maximaal aantal teamleden voor deze taak</span>
+                                    </label>
+                                    <div id="taak-max-docenten-container" style="display: none; margin-top: 0.5rem;">
+                                        <input type="number" id="taak-max-docenten" min="1" value="1"
+                                            style="width: 80px;">
+                                    </div>
+                                </div>
+
+                                <button type="button" id="btn-taak-toevoegen" class="btn btn-primary">
                                     <span>➕</span> Taak toevoegen
                                 </button>
                             </form>
@@ -557,7 +751,7 @@
 
                     <!-- Curriculum per class -->
                     <div class="card klassen-curriculum">
-                        <h3>📅 <span id="klassen-leerjaar-titel"></span> <span id="klassen-klas-titel"></span></h3>
+                        <h3><span id="klassen-leerjaar-titel"></span> <span id="klassen-klas-titel"></span></h3>
                         <div id="klassen-curriculum-grid" class="klassen-grid">
                             <p class="empty-state">Selecteer een docent, leerjaar en klas om het curriculum te zien</p>
                         </div>
@@ -582,7 +776,6 @@
 
                     <!-- Available Tasks -->
                     <div class="card taken-lijst-container">
-                        <h3>✅ Beschikbare taken</h3>
                         <div id="taken-selectie-grid" class="taken-selectie-grid">
                             <p class="empty-state">Selecteer een docent om taken te zien</p>
                         </div>
@@ -672,6 +865,11 @@
 
                 <!-- Niveau 3: Dummy PvI's -->
                 <div class="dashboard-niveau" id="dashboard-niveau-3">
+                    <div class="pvi-header-bar">
+                        <button class="btn btn-primary btn-export-pvi" onclick="exportPviToExcel()">
+                            <span>📥</span> Exporteer naar Excel
+                        </button>
+                    </div>
                     <div class="dashboard-grid" id="dashboard-pvi-grid">
                         <p class="empty-state">Voeg docenten toe om het overzicht te zien</p>
                     </div>
@@ -841,6 +1039,13 @@
                     </div>
                 </div>
 
+                <div class="form-group checkbox-inline">
+                    <input type="checkbox" id="edit-taak-naar-rato">
+                    <label for="edit-taak-naar-rato">Naar rato (uren × netto FTE)</label>
+                    <small class="form-hint">Wanneer aangevinkt worden de uren vermenigvuldigd met de netto FTE van het
+                        teamlid</small>
+                </div>
+
                 <div class="form-group">
                     <label>Verdeling</label>
                     <div class="toggle-switch-container">
@@ -889,21 +1094,21 @@
 
                 <div class="form-group checkbox-group">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="edit-taak-max-docenten-check">
-                        <span>Maximaal aantal teamleden voor deze taak</span>
-                    </label>
-                    <div id="edit-taak-max-docenten-container" style="display: none; margin-top: 0.5rem;">
-                        <input type="number" id="edit-taak-max-docenten" min="1" value="1" style="width: 80px;">
-                    </div>
-                </div>
-
-                <div class="form-group checkbox-group">
-                    <label class="checkbox-label">
                         <input type="checkbox" id="edit-taak-exact-docenten-check">
                         <span>Exact aantal teamleden voor deze taak</span>
                     </label>
                     <div id="edit-taak-exact-docenten-container" style="display: none; margin-top: 0.5rem;">
                         <input type="number" id="edit-taak-exact-docenten" min="1" value="1" style="width: 80px;">
+                    </div>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="edit-taak-max-docenten-check">
+                        <span>Maximaal aantal teamleden voor deze taak</span>
+                    </label>
+                    <div id="edit-taak-max-docenten-container" style="display: none; margin-top: 0.5rem;">
+                        <input type="number" id="edit-taak-max-docenten" min="1" value="1" style="width: 80px;">
                     </div>
                 </div>
 
@@ -983,28 +1188,55 @@
         </div>
     </div>
 
-    <!-- Role Selection Modal -->
-    <div id="role-selection-modal" class="modal" style="display: none;">
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal" style="display: none;">
         <div class="modal-backdrop"></div>
-        <div class="modal-content role-selection-content">
-            <div class="modal-header">
-                <h3>Welkom bij de Werkverdelingsapp</h3>
+        <div class="modal-content login-modal-content">
+            <div class="login-header">
+                <div class="login-logo">░</div>
+                <h2>Werkverdelingsapp</h2>
+                <p>Log in om verder te gaan</p>
             </div>
-            <div class="modal-body role-selection-body">
-                <p>Selecteer je rol om te beginnen:</p>
-                <div class="role-buttons">
-                    <button type="button" class="btn btn-role" onclick="setUserRole('teamleider')">
-                        <span class="role-icon">📢</span>
-                        <span class="role-title">Ik ben teamleider of onderwijsplanner</span>
-                        <span class="role-desc">Volledige toegang: lessen, taken en teamleden beheren</span>
-                    </button>
-                    <button type="button" class="btn btn-role" onclick="setUserRole('teamlid')">
-                        <span class="role-icon">👤</span>
-                        <span class="role-title">Ik ben teamlid</span>
-                        <span class="role-desc">Klassen en taken bekijken, werkverdeling doen</span>
-                    </button>
+            <form id="login-form" class="login-form" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="login-email">E-mailadres</label>
+                    <input type="email" id="login-email" placeholder="je@school.nl" required>
                 </div>
+                <div class="form-group">
+                    <label for="login-password">Wachtwoord</label>
+                    <input type="password" id="login-password" placeholder="••••••••" required>
+                </div>
+                <div id="login-error" class="login-error" style="display: none;"></div>
+                <button type="submit" class="btn btn-primary btn-login" id="login-submit-btn">
+                    <span class="login-btn-text">Inloggen</span>
+                    <span class="login-btn-loading" style="display: none;">⏳ Bezig...</span>
+                </button>
+                <div class="login-footer">
+                    <a href="#" onclick="showForgotPassword(event)">Wachtwoord vergeten?</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Forgot Password Modal -->
+    <div id="forgot-password-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="closeForgotPasswordModal()"></div>
+        <div class="modal-content login-modal-content">
+            <div class="login-header">
+                <h2>Wachtwoord resetten</h2>
+                <p>Vul je e-mailadres in om een reset link te ontvangen</p>
             </div>
+            <form id="forgot-password-form" onsubmit="handleForgotPassword(event)">
+                <div class="form-group">
+                    <label for="reset-email">E-mailadres</label>
+                    <input type="email" id="reset-email" placeholder="je@school.nl" required>
+                </div>
+                <div id="reset-message" class="login-message" style="display: none;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-ghost" onclick="closeForgotPasswordModal()">Terug</button>
+                    <button type="submit" class="btn btn-primary">Verstuur reset link</button>
+                </div>
+            </form>
         </div>
     </div>
 
