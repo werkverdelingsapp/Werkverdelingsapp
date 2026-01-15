@@ -275,15 +275,53 @@ function updateUserIndicator() {
     indicator.className = 'user-indicator';
 
     const displayName = currentUserProfile.afkorting || currentUserProfile.naam || currentAuthUser.email;
-    const rolLabel = state.currentUser.rol === 'teamleider' ? 'Admin' : 'Teamlid';
+    const actualRole = currentUserProfile.rol;
+    const viewingAs = state.adminViewingAs || actualRole;
+
+    // Show role toggle for admins
+    let roleToggleHtml = '';
+    if (isUserAdmin()) {
+        const isViewingAsTeamlid = viewingAs === 'teamlid';
+        roleToggleHtml = `
+            <button class="btn-role-toggle ${isViewingAsTeamlid ? 'viewing-as-teamlid' : ''}" 
+                    onclick="toggleAdminView()" 
+                    title="${isViewingAsTeamlid ? 'Terug naar Admin weergave' : 'Bekijk als Teamlid'}">
+                ${isViewingAsTeamlid ? '👤 Teamlid' : '👑 Admin'}
+            </button>
+        `;
+    }
+
+    const rolLabel = viewingAs === 'admin' ? '👑 Admin' :
+        viewingAs === 'teamleider' ? '📢 Teamleider' :
+            viewingAs === 'onderwijsplanner' ? '📋 Planner' : '👤 Teamlid';
 
     indicator.innerHTML = `
         <span class="user-name">${escapeHtml(displayName)}</span>
-        <span class="user-role">${rolLabel}</span>
-        <button class="btn-logout" onclick="handleLogout()" title="Uitloggen">Uitloggen</button>
+        <span class="user-role-label">${rolLabel}</span>
+        ${roleToggleHtml}
     `;
 
     navTabs.appendChild(indicator);
+}
+
+// Toggle admin view between admin and teamlid
+function toggleAdminView() {
+    if (!isUserAdmin()) return;
+
+    const currentView = state.adminViewingAs || currentUserProfile.rol;
+    state.adminViewingAs = (currentView === 'teamlid') ? 'admin' : 'teamlid';
+
+    // Update the role used for visibility checks
+    if (state.adminViewingAs === 'teamlid') {
+        state.currentUser.rol = 'teamlid';
+    } else {
+        state.currentUser.rol = currentUserProfile.rol;
+    }
+
+    updateTabVisibility();
+    updateUserIndicator();
+
+    console.log('Viewing as:', state.adminViewingAs);
 }
 
 // ============================================
@@ -5932,3 +5970,4 @@ window.createNewUser = createNewUser;
 // Admin functions
 window.switchActiveTeam = switchActiveTeam;
 window.createNewTeam = createNewTeam;
+window.toggleAdminView = toggleAdminView;
