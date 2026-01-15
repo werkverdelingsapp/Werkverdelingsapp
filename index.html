@@ -214,11 +214,10 @@
 
                         <div class="admin-user-form">
                             <div class="form-row">
-                                <input type="email" id="new-user-email" placeholder="E-mailadres">
+                                <input type="text" id="new-user-afkorting" placeholder="Afkorting (bijv. fwals)">
                                 <input type="password" id="new-user-password" placeholder="Wachtwoord (min. 6 tekens)">
                             </div>
                             <div class="form-row">
-                                <input type="text" id="new-user-afkorting" placeholder="Afkorting (bijv. fwals)">
                             </div>
                             <div class="form-row">
                                 <select id="new-user-team">
@@ -1195,47 +1194,23 @@
             <div class="login-header">
                 <div class="login-logo">░</div>
                 <h2>Werkverdelingsapp</h2>
-                <p>Log in om verder te gaan</p>
+                <p>Log in met je afkorting</p>
             </div>
             <form id="login-form" class="login-form" onsubmit="handleLogin(event)">
                 <div class="form-group">
-                    <label for="login-email">E-mailadres</label>
-                    <input type="email" id="login-email" placeholder="je@school.nl" required>
+                    <label for="login-afkorting">Afkorting</label>
+                    <input type="text" id="login-afkorting" placeholder="bijv. fwals" required autocomplete="username">
                 </div>
                 <div class="form-group">
                     <label for="login-password">Wachtwoord</label>
-                    <input type="password" id="login-password" placeholder="••••••••" required>
+                    <input type="password" id="login-password" placeholder="••••••••" required
+                        autocomplete="current-password">
                 </div>
                 <div id="login-error" class="login-error" style="display: none;"></div>
                 <button type="submit" class="btn btn-primary btn-login" id="login-submit-btn">
                     <span class="login-btn-text">Inloggen</span>
                     <span class="login-btn-loading" style="display: none;">⏳ Bezig...</span>
                 </button>
-                <div class="login-footer">
-                    <a href="#" onclick="showForgotPassword(event)">Wachtwoord vergeten?</a>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Forgot Password Modal -->
-    <div id="forgot-password-modal" class="modal" style="display: none;">
-        <div class="modal-backdrop" onclick="closeForgotPasswordModal()"></div>
-        <div class="modal-content login-modal-content">
-            <div class="login-header">
-                <h2>Wachtwoord resetten</h2>
-                <p>Vul je e-mailadres in om een reset link te ontvangen</p>
-            </div>
-            <form id="forgot-password-form" onsubmit="handleForgotPassword(event)">
-                <div class="form-group">
-                    <label for="reset-email">E-mailadres</label>
-                    <input type="email" id="reset-email" placeholder="je@school.nl" required>
-                </div>
-                <div id="reset-message" class="login-message" style="display: none;"></div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-ghost" onclick="closeForgotPasswordModal()">Terug</button>
-                    <button type="submit" class="btn btn-primary">Verstuur reset link</button>
-                </div>
             </form>
         </div>
     </div>

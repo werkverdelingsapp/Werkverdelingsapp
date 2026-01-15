@@ -148,12 +148,15 @@ function hideLoginModal() {
 async function handleLogin(event) {
     event.preventDefault();
 
-    const email = document.getElementById('login-email').value.trim();
+    const afkorting = document.getElementById('login-afkorting').value.trim().toLowerCase();
     const password = document.getElementById('login-password').value;
     const errorEl = document.getElementById('login-error');
     const submitBtn = document.getElementById('login-submit-btn');
     const btnText = submitBtn.querySelector('.login-btn-text');
     const btnLoading = submitBtn.querySelector('.login-btn-loading');
+
+    // Create internal email from afkorting
+    const email = `${afkorting}@werkverdelings.app`;
 
     // Show loading state
     btnText.style.display = 'none';
@@ -177,7 +180,7 @@ async function handleLogin(event) {
             case 'auth/invalid-credential':
             case 'auth/wrong-password':
             case 'auth/user-not-found':
-                message = 'Onjuiste e-mail of wachtwoord.';
+                message = 'Onjuiste afkorting of wachtwoord.';
                 break;
             case 'auth/too-many-requests':
                 message = 'Te veel inlogpogingen. Probeer later opnieuw.';
@@ -830,17 +833,19 @@ async function loadUsersList() {
 
 // Create new user
 async function createNewUser() {
-    const email = document.getElementById('new-user-email').value.trim();
+    const afkorting = document.getElementById('new-user-afkorting').value.trim().toLowerCase();
     const password = document.getElementById('new-user-password').value;
-    const afkorting = document.getElementById('new-user-afkorting').value.trim();
     const rol = document.getElementById('new-user-role').value;
     const teamId = document.getElementById('new-user-team').value;
     const fte = parseFloat(document.getElementById('new-user-fte').value) || 1.0;
     const docenttype = document.getElementById('new-user-docenttype').value.trim();
 
+    // Generate internal email from afkorting
+    const email = `${afkorting}@werkverdelings.app`;
+
     // Validation
-    if (!email || !password || !afkorting || !teamId) {
-        alert('Vul alle verplichte velden in (email, wachtwoord, afkorting, team)');
+    if (!afkorting || !password || !teamId) {
+        alert('Vul alle verplichte velden in (afkorting, wachtwoord, team)');
         return;
     }
 
@@ -876,12 +881,11 @@ async function createNewUser() {
             createdBy: currentUser?.uid || 'unknown'
         });
 
-        console.log('User created:', email);
+        console.log('User created:', afkorting);
 
         // Clear form
-        document.getElementById('new-user-email').value = '';
-        document.getElementById('new-user-password').value = '';
         document.getElementById('new-user-afkorting').value = '';
+        document.getElementById('new-user-password').value = '';
         document.getElementById('new-user-fte').value = '';
         document.getElementById('new-user-docenttype').value = '';
 
