@@ -1144,6 +1144,19 @@ function generateId() {
 function saveToLocalStorage() {
     localStorage.setItem('werkverdelingsapp-state', JSON.stringify(state));
     showSaveIndicator();
+
+    // Also trigger Firebase save if we have a valid team and user
+    // "Fire and forget" pattern to avoid making this function async and breaking callers
+    if (state.teamId &&
+        state.teamId !== 'default-team' &&
+        window.firebaseAuth?.currentUser) {
+
+        // Debounce slightly to avoid hammering Firestore on rapid edits
+        if (window.saveTimeout) clearTimeout(window.saveTimeout);
+        window.saveTimeout = setTimeout(() => {
+            smartSaveState().catch(err => console.error('Auto-save failed:', err));
+        }, 500);
+    }
 }
 
 function loadFromLocalStorage() {
