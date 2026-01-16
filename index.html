@@ -231,8 +231,18 @@
                                 </select>
                             </div>
                             <div class="form-row">
-                                <input type="number" id="new-user-fte" placeholder="FTE (bijv. 0.8)" step="0.1" min="0"
-                                    max="1.5">
+                                <div class="form-group compact">
+                                    <label for="new-user-fte">Aanstelling (Bruto FTE)</label>
+                                    <input type="number" id="new-user-fte" placeholder="1.0" step="0.01" min="0"
+                                        max="1.5">
+                                </div>
+                                <div class="form-group compact">
+                                    <label for="new-user-inhouding">Inhouding (FTE)</label>
+                                    <input type="number" id="new-user-inhouding" placeholder="0.0" step="0.01" min="0"
+                                        max="1.5">
+                                </div>
+                            </div>
+                            <div class="form-row">
                                 <input type="text" id="new-user-docenttype"
                                     placeholder="Docenttype (bijv. AVO: Nederlands)">
                             </div>
@@ -668,28 +678,22 @@
             <section class="view" id="view-docenten">
 
                 <div class="docenten-layout">
-                    <div class="card form-card">
-                        <h3>➕ Teamlid toevoegen</h3>
-                        <form id="form-docent">
-                            <div class="form-group">
-                                <label for="docent-naam">Naam (afkorting)</label>
-                                <input type="text" id="docent-naam" placeholder="bijv. fwals" required>
+                    <div class="card" style="border-left: 4px solid var(--accent-primary);">
+                        <div style="display: flex; gap: var(--space-md); align-items: flex-start;">
+                            <div style="font-size: 1.5rem; padding-top: 5px;">👥</div>
+                            <div>
+                                <h3 style="margin-bottom: var(--space-xs); border: none; padding: 0;">Teamleden Beheren
+                                </h3>
+                                <p style="color: var(--text-secondary); margin-bottom: var(--space-sm);">
+                                    Teamleden worden nu centraal beheerd via het <strong>Admin Paneel</strong>.
+                                </p>
+                                <p style="font-size: 0.9rem; color: var(--text-muted);">
+                                    Gebruik het admin icoon rechtsboven om gebruikers toe te voegen, aanstellingen (FTE)
+                                    te wijzigen of inhoudingen in te stellen.
+                                    Wijzigingen worden hier automatisch bijgewerkt.
+                                </p>
                             </div>
-                            <div class="modal-form-row">
-                                <div class="form-group">
-                                    <label for="docent-aanstelling">Aanstelling (bruto FTE)</label>
-                                    <input type="number" id="docent-aanstelling" min="0" max="1.5" step="0.01"
-                                        value="1.0" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="docent-inhouding">Inhouding (FTE)</label>
-                                    <input type="number" id="docent-inhouding" min="0" max="1" step="0.01" value="0">
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-primary">
-                                <span>➕</span> Teamlid toevoegen
-                            </button>
-                        </form>
+                        </div>
                     </div>
 
                     <div class="card">
@@ -1184,6 +1188,68 @@
                 <button type="button" class="btn btn-ghost" onclick="closeEditLeerjaarModal()">Annuleren</button>
                 <button type="button" class="btn btn-primary" onclick="saveEditLeerjaar()">💾 Opslaan</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div id="edit-user-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="closeEditUserModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Gebruiker bewerken</h3>
+                <button class="modal-close" onclick="closeEditUserModal()">×</button>
+            </div>
+            <form id="form-edit-user">
+                <input type="hidden" id="edit-user-id">
+
+                <div class="form-group">
+                    <label for="edit-user-afkorting">Afkorting (Login)</label>
+                    <input type="text" id="edit-user-afkorting" disabled
+                        style="background: var(--bg-secondary); color: var(--text-muted);">
+                    <small style="color: var(--text-muted)">Afkorting kan niet gewijzigd worden (maak nieuwe gebruiker
+                        voor wijziging)</small>
+                </div>
+
+                <div class="modal-form-row">
+                    <div class="form-group">
+                        <label for="edit-user-team">Team</label>
+                        <select id="edit-user-team" required>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-user-role">Rol</label>
+                        <select id="edit-user-role" required>
+                            <option value="teamlid">Teamlid</option>
+                            <option value="teamleider">Teamleider</option>
+                            <option value="onderwijsplanner">Onderwijsplanner</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-form-row">
+                    <div class="form-group">
+                        <label for="edit-user-fte">Aanstelling (Bruto)</label>
+                        <input type="number" id="edit-user-fte" min="0" max="1.5" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-user-inhouding">Inhouding</label>
+                        <input type="number" id="edit-user-inhouding" min="0" max="1.5" step="0.01" placeholder="0.0">
+                    </div>
+                </div>
+                <div class="modal-form-row">
+                    <div class="form-group">
+                        <label for="edit-user-docenttype">Docenttype</label>
+                        <input type="text" id="edit-user-docenttype" placeholder="Bijv. AVO">
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditUserModal()">Annuleren</button>
+                    <button type="button" class="btn btn-primary" onclick="saveEditUser()">💾 Opslaan</button>
+                </div>
+            </form>
         </div>
     </div>
 

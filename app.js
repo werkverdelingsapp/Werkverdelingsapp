@@ -358,6 +358,11 @@ async function loadTeamDataFromFirestore() {
             state.docentTaken = data.docentTaken || [];
 
             console.log('Team data loaded from Firestore:', state.teamId);
+
+            // Sync users to docenten state (Single Source of Truth)
+            // This ensures we have the latest user list as docenten
+            await syncUsersToDocentenState();
+
             return true;
         } else {
             console.log('No team data found, initializing empty');
@@ -448,6 +453,104 @@ function subscribeToTeamData() {
     } catch (error) {
         console.error('Error subscribing to team data:', error);
     }
+}
+
+// Sync Users collection to Docenten state (Single Source of Truth)
+async function syncUsersToDocentenState() {
+    if (!state.teamId || state.teamId === 'default-team') return;
+
+    try {
+        const { collection, query, where, getDocs } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+        const q = query(collection(db, 'users'), where('teamId', '==', state.teamId));
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+            console.log("No users found for team, keeping existing docenten state");
+            return;
+        }
+
+        const newDocenten = [];
+        const existingDocenten = state.docenten || [];
+
+        snapshot.forEach(doc => {
+            const userData = doc.data();
+            const userId = doc.id;
+            // Prefer afkorting as requested, fallback to naam or email part
+            const displayName = userData.afkorting || userData.naam || '';
+            const afkorting = userData.afkorting || '';
+
+            // Find existing docent to preserve color
+            // Try ID match first, then Afkorting match (migration scenario)
+            let existing = existingDocenten.find(d => d.id === userId);
+
+            if (!existing && afkorting) {
+                existing = existingDocenten.find(d => d.afkorting && d.afkorting.toLowerCase() === afkorting.toLowerCase());
+                if (existing) {
+                    // Migration needed! Found docent with same afkorting but different ID
+                    console.log(`Migrating docent ${afkorting}: ${existing.id} -> ${userId}`);
+                    migrateAssignments(existing.id, userId);
+                }
+            }
+
+            const bruto = parseFloat(userData.aanstellingBruto) || parseFloat(userData.FTE) || 1.0;
+            const inhouding = parseFloat(userData.inhouding) || 0.0;
+            const netto = Math.max(0, bruto - inhouding);
+
+            newDocenten.push({
+                id: userId, // Always use Auth ID
+                naam: displayName,
+                afkorting: afkorting,
+                aanstellingBruto: bruto,
+                inhouding: inhouding,
+                aanstelling: netto, // Used for calculations (Netto FTE)
+                kleur: existing?.kleur || getRandomColor()
+            });
+        });
+
+        // Sort by afkorting/naam
+        newDocenten.sort((a, b) => a.naam.localeCompare(b.naam));
+
+        // Update state
+        state.docenten = newDocenten;
+        console.log("Synced docenten from users:", state.docenten.length);
+
+        // Save updated state to Firestore team data
+        // This ensures the read-model (team doc) is up to date with the users collection
+        saveTeamDataToFirestore();
+
+        // Re-render
+        renderDocentenLijst();
+        renderAll();
+
+    } catch (err) {
+        console.error("Error syncing users to docenten:", err);
+    }
+}
+
+function migrateAssignments(oldId, newId) {
+    if (!oldId || !newId || oldId === newId) return;
+
+    let count = 0;
+    // Migrate leseenheden
+    state.toewijzingen.forEach(t => {
+        if (t.docentId === oldId) {
+            t.docentId = newId;
+            count++;
+        }
+    });
+
+    // Migrate taak toewijzingen
+    // Check if docentTaken array exists
+    if (state.docentTaken && Array.isArray(state.docentTaken)) {
+        const dt = state.docentTaken.find(d => d.docentId === oldId);
+        if (dt) {
+            dt.docentId = newId;
+            count++;
+        }
+    }
+
+    if (count > 0) console.log(`Migrated ${count} assignments and data from ${oldId} to ${newId}`);
 }
 
 // ============================================
@@ -816,14 +919,22 @@ async function loadUsersList() {
                         <span class="user-team-badge">${escapeHtml(teamLabel)}</span>
                         <span class="user-role-badge">${rolLabel}</span>
                         ${fteLabel ? `<span class="user-fte-badge">${fteLabel}</span>` : ''}
+                        ${user.inhouding > 0 ? `<span class="user-role-badge" style="background:rgba(239,68,68,0.15);color:#ef4444">-${user.inhouding} inh.</span>` : ''}
                     </div>
                     <div class="user-details">
                         <span class="user-email">${escapeHtml(user.email)}</span>
                         ${docenttypeLabel ? `<span class="user-docenttype">${escapeHtml(docenttypeLabel)}</span>` : ''}
                     </div>
+                    <div class="user-actions" style="margin-left: auto; display: flex; gap: 5px;">
+                        <button class="btn btn-sm btn-ghost" onclick="editUser('${user.id}')" title="Bewerken">✏️</button>
+                        <button class="btn btn-sm btn-ghost btn-danger" onclick="deleteUser('${user.id}')" title="Verwijderen">🗑️</button>
+                    </div>
                 </div>
             `;
         }).join('');
+
+        // Sync users to docenten state to ensure app is up to date immediately
+        await syncUsersToDocentenState();
 
     } catch (error) {
         console.error('Error loading users:', error);
@@ -837,7 +948,8 @@ async function createNewUser() {
     const password = document.getElementById('new-user-password').value;
     const rol = document.getElementById('new-user-role').value;
     const teamId = document.getElementById('new-user-team').value;
-    const fte = parseFloat(document.getElementById('new-user-fte').value) || 1.0;
+    const aanstellingBruto = parseFloat(document.getElementById('new-user-fte').value) || 1.0;
+    const inhouding = parseFloat(document.getElementById('new-user-inhouding').value) || 0.0;
     const docenttype = document.getElementById('new-user-docenttype').value.trim();
 
     // Generate internal email from afkorting
@@ -875,7 +987,9 @@ async function createNewUser() {
             afkorting: afkorting,
             rol: rol,
             teamId: teamId,
-            FTE: fte,
+            aanstellingBruto: aanstellingBruto,
+            inhouding: inhouding,
+            FTE: aanstellingBruto - inhouding, // Store netto FTE for backward compatibility/badge display
             docenttype: docenttype || '',
             createdAt: new Date().toISOString(),
             createdBy: currentUser?.uid || 'unknown'
@@ -887,6 +1001,7 @@ async function createNewUser() {
         document.getElementById('new-user-afkorting').value = '';
         document.getElementById('new-user-password').value = '';
         document.getElementById('new-user-fte').value = '';
+        document.getElementById('new-user-inhouding').value = '';
         document.getElementById('new-user-docenttype').value = '';
 
         // Reload users list
@@ -915,6 +1030,113 @@ async function createNewUser() {
         }
 
         alert(message);
+    }
+}
+
+// User Edit Functions
+async function editUser(userId) {
+    if (!userId) return;
+
+    try {
+        const { doc, getDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const userDoc = await getDoc(doc(db, 'users', userId));
+        if (!userDoc.exists()) {
+            alert('Gebruiker niet gevonden');
+            return;
+        }
+
+        const userData = userDoc.data();
+
+        document.getElementById('edit-user-id').value = userId;
+        document.getElementById('edit-user-afkorting').value = userData.afkorting || '';
+        document.getElementById('edit-user-role').value = userData.rol;
+        document.getElementById('edit-user-fte').value = userData.aanstellingBruto || userData.FTE || 1.0;
+        document.getElementById('edit-user-inhouding').value = userData.inhouding || 0.0;
+        document.getElementById('edit-user-docenttype').value = userData.docenttype || '';
+
+        // Populate teams dropdown in edit modal by copying options from the creation form
+        const editTeamSelect = document.getElementById('edit-user-team');
+        const newTeamSelect = document.getElementById('new-user-team');
+
+        if (newTeamSelect && editTeamSelect) {
+            editTeamSelect.innerHTML = newTeamSelect.innerHTML;
+            editTeamSelect.value = userData.teamId;
+        }
+
+        document.getElementById('edit-user-modal').style.display = 'flex';
+
+    } catch (err) {
+        console.error("Error editing user", err);
+        alert("Fout bij ophalen gebruiker");
+    }
+}
+
+function closeEditUserModal() {
+    document.getElementById('edit-user-modal').style.display = 'none';
+}
+
+async function saveEditUser() {
+    const userId = document.getElementById('edit-user-id').value;
+    const teamId = document.getElementById('edit-user-team').value;
+    const rol = document.getElementById('edit-user-role').value;
+    const aanstellingBruto = parseFloat(document.getElementById('edit-user-fte').value) || 1.0;
+    const inhouding = parseFloat(document.getElementById('edit-user-inhouding').value) || 0.0;
+    const docenttype = document.getElementById('edit-user-docenttype').value.trim();
+
+    if (!userId || !teamId || !rol) {
+        alert('Vul alle verplichte velden in');
+        return;
+    }
+
+    try {
+        const { doc, updateDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+        const auth = window.firebaseAuth;
+
+        const updates = {
+            teamId: teamId,
+            rol: rol,
+            aanstellingBruto: aanstellingBruto,
+            inhouding: inhouding,
+            FTE: aanstellingBruto - inhouding, // Netto FTE for compatibility
+            docenttype: docenttype,
+            lastModified: new Date().toISOString()
+        };
+
+        await updateDoc(doc(db, 'users', userId), updates);
+
+        closeEditUserModal();
+        await loadUsersList();
+
+        // Update user indicator if we edited ourselves
+        if (auth.currentUser && userId === auth.currentUser.uid) {
+            currentUserProfile = { ...currentUserProfile, ...updates };
+            updateUserIndicator();
+        }
+
+    } catch (err) {
+        console.error("Error saving user", err);
+        alert("Fout bij opslaan: " + err.message);
+    }
+}
+
+async function deleteUser(userId) {
+    if (!confirm('Let op! Je staat op het punt een gebruiker te verwijderen.\n\nDit verwijdert alleen de data in de database. Het inlogaccount (Auth) blijft bestaan (dit moet je apart verwijderen in de Firebase Console indien nodig).\n\nWil je doorgaan?')) {
+        return;
+    }
+
+    try {
+        const { doc, deleteDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        await deleteDoc(doc(db, 'users', userId));
+        await loadUsersList();
+
+    } catch (err) {
+        console.error("Error deleting user", err);
+        alert("Fout bij verwijderen: " + err.message);
     }
 }
 
@@ -1476,7 +1698,6 @@ function setUserRole(role) {
 
 function updateTabVisibility() {
     const role = state.currentUser.rol;
-    const isAdmin = isUserAdmin();
 
     // Define which tabs each role can see
     // Admin and teamleider/onderwijsplanner see all tabs
@@ -1488,7 +1709,7 @@ function updateTabVisibility() {
     allTabs.forEach(tab => {
         const view = tab.getAttribute('data-view');
 
-        if (isAdmin || role === 'teamleider' || role === 'onderwijsplanner') {
+        if (role === 'admin' || role === 'teamleider' || role === 'onderwijsplanner') {
             // Admin, teamleider, onderwijsplanner see all tabs
             tab.classList.remove('role-hidden');
         } else if (role === 'teamlid') {
@@ -1504,7 +1725,7 @@ function updateTabVisibility() {
         }
     });
 
-    console.log('Tab visibility updated for role:', role, 'isAdmin:', isAdmin);
+    console.log('Tab visibility updated for role:', role);
 }
 
 function getCurrentUserRole() {
@@ -3059,76 +3280,55 @@ function initEditVakForm() {
 // ============================================
 
 function initDocentenForm() {
-    const form = document.getElementById('form-docent');
-    form.addEventListener('submit', (e) => {
-        e.preventDefault();
-
-        const naam = document.getElementById('docent-naam').value.trim();
-        const aanstelling = parseFloat(document.getElementById('docent-aanstelling').value) || 1.0;
-        const inhouding = parseFloat(document.getElementById('docent-inhouding').value) || 0;
-
-        if (naam) {
-            addDocent(naam, aanstelling, inhouding);
-            document.getElementById('docent-naam').value = '';
-            document.getElementById('docent-aanstelling').value = '1.0';
-            document.getElementById('docent-inhouding').value = '0';
-        }
-    });
+    // Form removed - user management now centralized in Admin Panel
 }
 
 function addDocent(naam, aanstellingBruto = 1.0, inhouding = 0) {
-    const docent = {
-        id: generateId(),
-        naam: naam,
-        aanstellingBruto: aanstellingBruto,
-        inhouding: inhouding
-    };
-    state.docenten.push(docent);
-    saveToLocalStorage();
-    renderDocentenLijst();
-    updateDocentSelector();
+    // Legacy function - create user via Admin panel instead
+    console.warn('Use Admin Panel to create new users/docenten');
 }
 
 function renderDocentenLijst() {
     const container = document.getElementById('docenten-lijst');
 
-    if (state.docenten.length === 0) {
-        container.innerHTML = '<p class="empty-state">Nog geen teamleden toegevoegd.</p>';
+    if (!state.docenten || state.docenten.length === 0) {
+        container.innerHTML = '<p class="empty-state">Nog geen teamleden toegevoegd. Ga naar Admin om gebruikers toe te voegen.</p>';
         return;
     }
 
     // Constants for FTE calculation
     const BESCHIKBAAR_PER_FTE = 1600; // 1659 - 59 uur deskundigheidsbevordering
 
-    // Sort docenten by second letter onwards
+    // Sort docenten by naam
     const sortedDocenten = [...state.docenten].sort((a, b) =>
-        a.naam.substring(1).localeCompare(b.naam.substring(1))
+        (a.naam || '').localeCompare(b.naam || '')
     );
 
     container.innerHTML = sortedDocenten.map(docent => {
         // Get FTE values with defaults for backward compatibility
-        const brutoFTE = docent.aanstellingBruto ?? 1.0;
+        const brutoFTE = docent.aanstellingBruto ?? docent.aanstelling ?? 1.0;
         const inhouding = docent.inhouding ?? 0;
 
         // Calculations
-        const nettoFTE = brutoFTE - inhouding;
+        // Note: aanstelling calculated in syncUsersToDocentenState is already Netto
+        // But for safety recap:
+        const nettoFTE = Math.max(0, brutoFTE - inhouding);
         const beschikbareUren = nettoFTE * BESCHIKBAAR_PER_FTE;
         const onderwijsUren = beschikbareUren * 0.75;
         const takenUren = beschikbareUren * 0.25;
 
-        const afkorting = docent.naam.substring(0, 3).toLowerCase();
+        // Display name handling
+        const displayName = escapeHtml(docent.naam || docent.afkorting || 'Onbekend');
+        const afkorting = displayName.substring(0, 3).toLowerCase();
 
         return `
             <div class="docent-card">
                 <div class="docent-header">
                     <div class="docent-naam-container">
                         <span class="docent-afkorting-label">${afkorting}</span>
-                        <div class="docent-naam-groot">${escapeHtml(docent.naam)}</div>
+                        <div class="docent-naam-groot">${displayName}</div>
                     </div>
-                    <div class="docent-actions">
-                        <button class="docent-edit" onclick="editDocent('${docent.id}')" title="Bewerken">✏️</button>
-                        <button class="docent-delete" onclick="deleteDocent('${docent.id}')" title="Verwijderen">🗑️</button>
-                    </div>
+                    <!-- Actions removed: manage via Admin -->
                 </div>
                 <div class="docent-fte-grid">
                     <div class="fte-item">
@@ -5983,6 +6183,10 @@ window.smartSaveState = smartSaveState;
 
 // User management functions
 window.createNewUser = createNewUser;
+window.editUser = editUser;
+window.closeEditUserModal = closeEditUserModal;
+window.saveEditUser = saveEditUser;
+window.deleteUser = deleteUser;
 
 // Admin functions
 window.switchActiveTeam = switchActiveTeam;
