@@ -2360,7 +2360,7 @@ function updateTabVisibility() {
     // Teamlid: only Lessen, Taken, Dummy PvI's, Dashboard
 
     const allTabs = document.querySelectorAll('.nav-tab[data-view]');
-    const teamlidVisibleViews = ['klassen', 'taken', 'verdeling', 'dashboard'];
+    const teamlidVisibleViews = ['klassen', 'taken', 'verdeling', 'dashboard', 'docenten'];
     const leaderVisibleViews = ['curriculum', 'docenten', 'klassen', 'taken', 'verdeling', 'takenbeheer', 'dashboard'];
 
     allTabs.forEach(tab => {
