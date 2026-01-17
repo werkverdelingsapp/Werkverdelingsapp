@@ -135,9 +135,23 @@ async function fetchUserProfile(userId) {
 // Show login modal
 function showLoginModal() {
     const modal = document.getElementById('login-modal');
+    const appContainer = document.querySelector('.app-container');
+
     if (modal) {
         modal.style.display = 'flex';
+        // Focus on first input
+        setTimeout(() => {
+            const firstInput = modal.querySelector('input');
+            if (firstInput) firstInput.focus();
+        }, 100);
     }
+
+    // Make app container inert (prevents tab navigation behind modal)
+    if (appContainer) {
+        appContainer.setAttribute('inert', '');
+        appContainer.setAttribute('aria-hidden', 'true');
+    }
+
     // Hide role selection modal since we get role from database now
     const roleModal = document.getElementById('role-selection-modal');
     if (roleModal) {
@@ -148,8 +162,16 @@ function showLoginModal() {
 // Hide login modal
 function hideLoginModal() {
     const modal = document.getElementById('login-modal');
+    const appContainer = document.querySelector('.app-container');
+
     if (modal) {
         modal.style.display = 'none';
+    }
+
+    // Remove inert from app container
+    if (appContainer) {
+        appContainer.removeAttribute('inert');
+        appContainer.removeAttribute('aria-hidden');
     }
 }
 
@@ -363,6 +385,14 @@ async function saveTeamDataToFirestore() {
         return;
     }
 
+    // TEAM ISOLATION CHECK: Only allow saving to user's own team unless admin
+    const userTeamId = currentUserProfile?.teamId;
+    if (!isUserAdmin() && userTeamId && userTeamId !== state.teamId) {
+        console.error('BLOCKED: Attempted to save data to different team!',
+            'User team:', userTeamId, 'Target team:', state.teamId);
+        return;
+    }
+
     try {
         const { doc, setDoc } = window.firebaseFunctions;
         const db = window.firebaseDb;
@@ -381,7 +411,7 @@ async function saveTeamDataToFirestore() {
         };
 
         await setDoc(doc(db, 'teams', state.teamId), teamData, { merge: true });
-        console.log('Team data saved to Firestore');
+        console.log('Team data saved to Firestore:', state.teamId);
 
     } catch (error) {
         console.error('Error saving team data:', error);

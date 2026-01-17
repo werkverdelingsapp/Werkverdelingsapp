@@ -1564,9 +1564,28 @@ body {
    DOCENTEN VIEW
    ============================================ */
 .docenten-layout {
-    display: grid;
-    grid-template-columns: 400px 1fr;
-    gap: var(--space-xl);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.section-header-with-subtitle {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.section-header-with-subtitle h3 {
+    margin: 0;
+    border: none;
+    padding: 0;
+}
+
+.admin-managed-by {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 .docenten-lijst {
@@ -3269,6 +3288,12 @@ body {
     backdrop-filter: blur(4px);
 }
 
+/* Fully opaque backdrop for login modal */
+#login-modal .modal-backdrop {
+    background: var(--bg-primary);
+    backdrop-filter: none;
+}
+
 .modal-content {
     position: relative;
     background: var(--bg-secondary);
@@ -3378,17 +3403,25 @@ body {
 }
 
 .login-header {
-    padding: var(--space-xl) var(--space-lg) var(--space-lg);
+    padding: var(--space-md) var(--space-lg) var(--space-sm);
     background: var(--accent-gradient);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     margin: calc(var(--space-md) * -1);
-    margin-bottom: var(--space-lg);
+    margin-bottom: var(--space-md);
 }
 
 .login-logo {
     font-size: 3rem;
     margin-bottom: var(--space-sm);
     opacity: 0.9;
+}
+
+.login-logo-img {
+    width: 180px;
+    height: 180px;
+    margin-bottom: var(--space-xs);
+    object-fit: contain;
+    filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.3)) drop-shadow(0 0 40px rgba(99, 102, 241, 0.4));
 }
 
 .login-header h2 {
@@ -3540,17 +3573,17 @@ body {
     font-size: 0.9rem;
 }
 
-/* Role-specific badge colors with neon glow - matching logout button teal */
+/* Role-specific badge colors with neon glow - gold/yellow */
 .user-badge.role-admin,
 .user-badge.role-leader,
 .user-badge.role-member {
-    background: rgba(20, 184, 166, 0.15);
-    border-color: rgba(20, 184, 166, 0.5);
-    color: #14b8a6;
-    box-shadow: 0 0 8px rgba(20, 184, 166, 0.4), 0 0 16px rgba(20, 184, 166, 0.2);
+    background: rgba(251, 191, 36, 0.12);
+    border-color: rgba(251, 191, 36, 0.5);
+    color: #fbbf24;
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.35), 0 0 16px rgba(251, 191, 36, 0.15);
 }
 
-/* Compact logout button */
+/* Compact logout button - gold/yellow */
 .btn-logout-small {
     display: flex;
     align-items: center;
@@ -3558,18 +3591,19 @@ body {
     width: 32px;
     height: 32px;
     padding: 0;
-    background: rgba(20, 184, 166, 0.15);
-    border: 1.5px solid rgba(20, 184, 166, 0.4);
-    color: #14b8a6;
+    background: rgba(251, 191, 36, 0.12);
+    border: 1.5px solid rgba(251, 191, 36, 0.5);
+    color: #fbbf24;
     border-radius: var(--radius-full);
     cursor: pointer;
     font-size: 1rem;
     transition: all 0.2s;
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.3), 0 0 12px rgba(251, 191, 36, 0.15);
 }
 
 .btn-logout-small:hover {
-    background: rgba(20, 184, 166, 0.25);
-    border-color: #14b8a6;
+    background: rgba(251, 191, 36, 0.2);
+    border-color: #fbbf24;
     transform: scale(1.05);
 }
 
@@ -4936,8 +4970,8 @@ body {
 
 .user-row {
     display: grid;
-    grid-template-columns: 80px 1fr 80px 110px 50px 50px auto;
-    gap: var(--space-sm);
+    grid-template-columns: 70px 1fr 70px 100px 45px 45px 60px;
+    gap: var(--space-xs);
     align-items: center;
     padding: var(--space-xs) var(--space-sm);
     background: var(--bg-secondary);
