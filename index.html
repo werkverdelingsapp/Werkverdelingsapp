@@ -79,23 +79,23 @@
                 <h1>Werkverdelingsapp</h1>
             </div>
             <div class="nav-tabs">
-                <button class="nav-tab active" data-view="admin" data-role="admin">
+                <button class="nav-tab" data-view="admin" data-role="admin" style="display:none">
                     <span class="tab-icon">⚙️</span>
                     Admin
                 </button>
-                <button class="nav-tab" data-view="curriculum" data-role="admin">
+                <button class="nav-tab" data-view="curriculum" data-role="admin" style="display:none">
                     <span class="tab-icon">📚</span>
                     Lessenbeheer
                 </button>
-                <button class="nav-tab" data-view="takenbeheer" data-role="admin">
-                    <span class="tab-icon">✅</span>
+                <button class="nav-tab" data-view="takenbeheer" data-role="admin" style="display:none">
+                    <span class="tab-icon">📝</span>
                     Takenbeheer
                 </button>
-                <button class="nav-tab" data-view="docenten" data-role="admin">
+                <button class="nav-tab" data-view="docenten" data-role="admin" style="display:none">
                     <span class="tab-icon">👥</span>
                     Teamledenbeheer
                 </button>
-                <button class="nav-tab" data-view="klassen">
+                <button class="nav-tab active" data-view="klassen">
                     <span class="tab-icon">🏫</span>
                     Lessen
                 </button>
@@ -118,7 +118,7 @@
         <main class="main-content">
 
             <!-- Admin View -->
-            <section class="view active" id="view-admin">
+            <section class="view" id="view-admin">
                 <!-- Team Switcher at top right -->
                 <div class="admin-top-bar">
                     <div class="team-switcher" id="team-switcher" style="display: none;">
@@ -644,7 +644,7 @@
             </section>
 
             <!-- Klassen View -->
-            <section class="view" id="view-klassen">
+            <section class="view active" id="view-klassen">
 
                 <div class="klassen-layout">
                     <!-- Selection Panel -->

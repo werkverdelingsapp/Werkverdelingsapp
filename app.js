@@ -2086,7 +2086,7 @@ function renderAll() {
     updateWeekInfoDisplays();
 
     // Re-render any active views
-    if (typeof renderKlassenCurriculum === 'function') renderKlassenCurriculum();
+    if (typeof renderKlassenView === 'function') renderKlassenView();
     if (typeof renderVerdelingView === 'function') renderVerdelingView();
     if (typeof renderDashboard === 'function') renderDashboard();
 }
