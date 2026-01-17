@@ -40,6 +40,8 @@ async function initFirebaseAuth() {
             // Fetch user profile from Firestore
             await fetchUserProfile(user.uid);
 
+            console.log('Loading team data for teamId:', state.teamId);
+
             // Load team data from Firestore
             await loadTeamDataFromFirestore();
 
@@ -60,6 +62,7 @@ async function initFirebaseAuth() {
 
             // Load user management data (for admins)
             loadTeamsDropdown();
+            loadSchooljaren();
             loadTeamsList();
             loadUsersList();
 
@@ -107,7 +110,15 @@ async function fetchUserProfile(userId) {
                 rol: currentUserProfile.rol || 'teamlid',
                 teamId: currentUserProfile.teamId || 'default-team'
             };
-            state.teamId = currentUserProfile.teamId || 'default-team';
+
+            // For admins, check if they had a different team selected (persisted in localStorage)
+            const savedAdminTeam = localStorage.getItem('adminSelectedTeam');
+            if (currentUserProfile.rol === 'admin' && savedAdminTeam) {
+                state.teamId = savedAdminTeam;
+                console.log('Admin restored to previously selected team:', savedAdminTeam);
+            } else {
+                state.teamId = currentUserProfile.teamId || 'default-team';
+            }
 
             console.log('User profile loaded:', currentUserProfile);
         } else {
@@ -355,12 +366,37 @@ async function loadTeamDataFromFirestore() {
             state.vakken = data.vakken || [];
             state.docenten = data.docenten || [];
             state.toewijzingen = data.toewijzingen || [];
-            state.basisweken = data.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
-            state.wekenPerPeriode = data.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
             state.taken = data.taken || [];
             state.docentTaken = data.docentTaken || [];
 
-            console.log('Team data loaded from Firestore:', state.teamId);
+            // Get schooljaarId (new) or schooljaar (legacy)
+            state.schooljaarId = data.schooljaarId || data.schooljaar || '';
+
+            // Load week settings from schooljaren collection
+            if (state.schooljaarId) {
+                try {
+                    const sjDoc = await getDoc(doc(db, 'schooljaren', state.schooljaarId));
+                    if (sjDoc.exists()) {
+                        const sjData = sjDoc.data();
+                        state.basisweken = sjData.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
+                        state.wekenPerPeriode = sjData.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
+                    } else {
+                        // Fallback to team data (legacy) or defaults
+                        state.basisweken = data.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
+                        state.wekenPerPeriode = data.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
+                    }
+                } catch (e) {
+                    console.error('Error loading schooljaar:', e);
+                    state.basisweken = data.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
+                    state.wekenPerPeriode = data.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
+                }
+            } else {
+                // No schooljaar linked - use team data or defaults
+                state.basisweken = data.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
+                state.wekenPerPeriode = data.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
+            }
+
+            console.log('Team data loaded from Firestore:', state.teamId, 'schooljaar:', state.schooljaarId);
 
             // Sync users to docenten state (Single Source of Truth)
             // This ensures we have the latest user list as docenten
@@ -803,7 +839,249 @@ async function loadTeamsDropdown() {
     }
 }
 
-// Load teams list for display
+// ============================================
+//  SCHOOLJAREN MANAGEMENT
+// ============================================
+
+// Load schooljaren list
+async function loadSchooljaren() {
+    const container = document.getElementById('schooljaren-list');
+    if (!container) return;
+
+    try {
+        const { collection, getDocs } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const snapshot = await getDocs(collection(db, 'schooljaren'));
+
+        if (snapshot.empty) {
+            container.innerHTML = '<p class="empty-state small">Nog geen schooljaren</p>';
+            return;
+        }
+
+        const schooljaren = [];
+        snapshot.forEach(doc => {
+            schooljaren.push({ id: doc.id, ...doc.data() });
+        });
+
+        // Sort by naam (year)
+        schooljaren.sort((a, b) => (a.naam || a.id).localeCompare(b.naam || b.id));
+
+        container.innerHTML = schooljaren.map(sj => {
+            const weken = sj.basisweken || {};
+            const basisInfo = `B:${weken[1] || 8}/${weken[2] || 8}/${weken[3] || 8}/${weken[4] || 8}`;
+            return `
+                <div class="schooljaar-row">
+                    <span class="schooljaar-naam">'${escapeHtml(sj.naam || sj.id)}</span>
+                    <span class="schooljaar-weken">${basisInfo}</span>
+                    <span class="team-actions">
+                        <button class="btn-icon-small" onclick="editSchooljaar('${sj.id}')" title="Bewerken">✏️</button>
+                        <button class="btn-icon-small btn-danger-icon" onclick="deleteSchooljaar('${sj.id}')" title="Verwijderen">🗑️</button>
+                    </span>
+                </div>
+            `;
+        }).join('');
+
+        // Also update dropdowns
+        await loadSchooljaarDropdowns();
+
+    } catch (error) {
+        console.error('Error loading schooljaren:', error);
+        container.innerHTML = '<p class="empty-state small">Fout bij laden</p>';
+    }
+}
+
+// Load schooljaar dropdowns
+async function loadSchooljaarDropdowns() {
+    try {
+        const { collection, getDocs } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const snapshot = await getDocs(collection(db, 'schooljaren'));
+        const schooljaren = [];
+        snapshot.forEach(doc => {
+            schooljaren.push({ id: doc.id, ...doc.data() });
+        });
+        schooljaren.sort((a, b) => (b.naam || b.id).localeCompare(a.naam || a.id)); // Newest first
+
+        // Team creation dropdown
+        const teamDropdown = document.getElementById('new-team-schooljaar');
+        if (teamDropdown) {
+            teamDropdown.innerHTML = '<option value="">Schooljaar</option>' +
+                schooljaren.map(sj => `<option value="${sj.id}">'${escapeHtml(sj.naam || sj.id)}</option>`).join('');
+        }
+    } catch (error) {
+        console.error('Error loading schooljaar dropdowns:', error);
+    }
+}
+
+// Create new schooljaar
+async function createSchooljaar() {
+    const naamInput = document.getElementById('new-schooljaar-naam');
+    const naam = naamInput?.value.trim();
+
+    if (!naam) {
+        alert('Vul een schooljaar in (bijv. 26-27)');
+        return;
+    }
+
+    // Read from inline input fields
+    const basis1 = document.getElementById('sj-basis-1')?.value || '8';
+    const basis2 = document.getElementById('sj-basis-2')?.value || '8';
+    const basis3 = document.getElementById('sj-basis-3')?.value || '8';
+    const basis4 = document.getElementById('sj-basis-4')?.value || '8';
+
+    const periode1 = document.getElementById('sj-periode-1')?.value || '10';
+    const periode2 = document.getElementById('sj-periode-2')?.value || '10';
+    const periode3 = document.getElementById('sj-periode-3')?.value || '10';
+    const periode4 = document.getElementById('sj-periode-4')?.value || '10';
+
+    try {
+        const { doc, setDoc, getDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        // Check if already exists
+        const existingDoc = await getDoc(doc(db, 'schooljaren', naam));
+        if (existingDoc.exists()) {
+            alert(`Schooljaar "${naam}" bestaat al!`);
+            return;
+        }
+
+        await setDoc(doc(db, 'schooljaren', naam), {
+            naam: naam,
+            basisweken: {
+                1: parseInt(basis1) || 8,
+                2: parseInt(basis2) || 8,
+                3: parseInt(basis3) || 8,
+                4: parseInt(basis4) || 8
+            },
+            wekenPerPeriode: {
+                1: parseInt(periode1) || 10,
+                2: parseInt(periode2) || 10,
+                3: parseInt(periode3) || 10,
+                4: parseInt(periode4) || 10
+            },
+            createdAt: new Date().toISOString()
+        });
+
+        // Clear and reset form
+        naamInput.value = '';
+        await loadSchooljaren();
+        alert(`Schooljaar "${naam}" is aangemaakt!`);
+
+    } catch (error) {
+        console.error('Error creating schooljaar:', error);
+        alert('Fout bij aanmaken: ' + error.message);
+    }
+}
+
+// Edit schooljaar - open modal
+async function editSchooljaar(schooljaarId) {
+    try {
+        const { doc, getDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const sjDoc = await getDoc(doc(db, 'schooljaren', schooljaarId));
+        if (!sjDoc.exists()) {
+            alert('Schooljaar niet gevonden');
+            return;
+        }
+
+        const sj = sjDoc.data();
+        const basisweken = sj.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
+        const wekenPerPeriode = sj.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
+
+        // Populate modal
+        document.getElementById('edit-schooljaar-id').value = schooljaarId;
+        document.getElementById('edit-schooljaar-naam-display').textContent = `'${sj.naam || schooljaarId}`;
+        document.getElementById('edit-sj-basis-1').value = basisweken[1];
+        document.getElementById('edit-sj-basis-2').value = basisweken[2];
+        document.getElementById('edit-sj-basis-3').value = basisweken[3];
+        document.getElementById('edit-sj-basis-4').value = basisweken[4];
+        document.getElementById('edit-sj-periode-1').value = wekenPerPeriode[1];
+        document.getElementById('edit-sj-periode-2').value = wekenPerPeriode[2];
+        document.getElementById('edit-sj-periode-3').value = wekenPerPeriode[3];
+        document.getElementById('edit-sj-periode-4').value = wekenPerPeriode[4];
+
+        // Show modal
+        document.getElementById('edit-schooljaar-modal').style.display = 'flex';
+
+    } catch (error) {
+        console.error('Error loading schooljaar:', error);
+        alert('Fout bij laden: ' + error.message);
+    }
+}
+
+function closeEditSchooljaarModal() {
+    document.getElementById('edit-schooljaar-modal').style.display = 'none';
+}
+
+async function saveEditSchooljaar() {
+    try {
+        const { doc, setDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const schooljaarId = document.getElementById('edit-schooljaar-id').value;
+
+        await setDoc(doc(db, 'schooljaren', schooljaarId), {
+            basisweken: {
+                1: parseInt(document.getElementById('edit-sj-basis-1').value) || 8,
+                2: parseInt(document.getElementById('edit-sj-basis-2').value) || 8,
+                3: parseInt(document.getElementById('edit-sj-basis-3').value) || 8,
+                4: parseInt(document.getElementById('edit-sj-basis-4').value) || 8
+            },
+            wekenPerPeriode: {
+                1: parseInt(document.getElementById('edit-sj-periode-1').value) || 10,
+                2: parseInt(document.getElementById('edit-sj-periode-2').value) || 10,
+                3: parseInt(document.getElementById('edit-sj-periode-3').value) || 10,
+                4: parseInt(document.getElementById('edit-sj-periode-4').value) || 10
+            }
+        }, { merge: true });
+
+        closeEditSchooljaarModal();
+        await loadSchooljaren();
+
+    } catch (error) {
+        console.error('Error saving schooljaar:', error);
+        alert('Fout bij opslaan: ' + error.message);
+    }
+}
+
+// Delete schooljaar
+async function deleteSchooljaar(schooljaarId) {
+    try {
+        const { collection, getDocs, doc, deleteDoc, query, where } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        // Check if any teams use this schooljaar
+        const teamsSnapshot = await getDocs(collection(db, 'teams'));
+        let linkedTeams = 0;
+        teamsSnapshot.forEach(teamDoc => {
+            if (teamDoc.data().schooljaarId === schooljaarId) {
+                linkedTeams++;
+            }
+        });
+
+        if (linkedTeams > 0) {
+            alert(`Kan schooljaar niet verwijderen: er zijn nog ${linkedTeams} team(s) gekoppeld.`);
+            return;
+        }
+
+        if (!confirm(`Weet je zeker dat je schooljaar "${schooljaarId}" wilt verwijderen?`)) {
+            return;
+        }
+
+        await deleteDoc(doc(db, 'schooljaren', schooljaarId));
+        await loadSchooljaren();
+        alert('Schooljaar is verwijderd.');
+
+    } catch (error) {
+        console.error('Error deleting schooljaar:', error);
+        alert('Fout bij verwijderen: ' + error.message);
+    }
+}
+
+
 async function loadTeamsList() {
     const container = document.getElementById('teams-list');
     if (!container) return;
@@ -812,20 +1090,31 @@ async function loadTeamsList() {
         const { collection, getDocs, query, where } = window.firebaseFunctions;
         const db = window.firebaseDb;
 
-        const snapshot = await getDocs(collection(db, 'teams'));
+        // Load teams and schooljaren
+        const [teamsSnapshot, schooljarenSnapshot, usersSnapshot] = await Promise.all([
+            getDocs(collection(db, 'teams')),
+            getDocs(collection(db, 'schooljaren')),
+            getDocs(collection(db, 'users'))
+        ]);
 
-        if (snapshot.empty) {
+        if (teamsSnapshot.empty) {
             container.innerHTML = '<p class="empty-state small">Nog geen teams</p>';
             return;
         }
 
+        // Build schooljaren lookup
+        const schooljarenMap = {};
+        schooljarenSnapshot.forEach(doc => {
+            schooljarenMap[doc.id] = doc.data();
+        });
+
+        // Build teams array
         const teams = [];
-        snapshot.forEach(doc => {
+        teamsSnapshot.forEach(doc => {
             teams.push({ id: doc.id, ...doc.data() });
         });
 
         // Get user counts per team
-        const usersSnapshot = await getDocs(collection(db, 'users'));
         const userCountByTeam = {};
         usersSnapshot.forEach(doc => {
             const teamId = doc.data().teamId;
@@ -834,13 +1123,30 @@ async function loadTeamsList() {
             }
         });
 
+        // Sort by schooljaar (descending), then by team name
+        teams.sort((a, b) => {
+            const sjA = a.schooljaarId || a.schooljaar || '';
+            const sjB = b.schooljaarId || b.schooljaar || '';
+            if (sjA !== sjB) {
+                return sjB.localeCompare(sjA); // Descending (newest first)
+            }
+            return (a.naam || a.id).localeCompare(b.naam || b.id);
+        });
+
         container.innerHTML = teams.map(team => {
             const userCount = userCountByTeam[team.id] || 0;
+            const schooljaarId = team.schooljaarId || team.schooljaar || '';
+            const schooljaarDisplay = schooljaarId ? `'${schooljaarId}` : '';
             return `
                 <div class="team-row">
                     <span class="team-name">${escapeHtml(team.naam || team.id)}</span>
+                    <span class="team-schooljaar">${schooljaarDisplay}</span>
                     <span class="team-users">${userCount} 👤</span>
-                    <button class="btn-delete-small" onclick="deleteTeam('${team.id}')" title="Verwijderen">🗑️</button>
+                    <span class="team-actions">
+                        <button class="btn-icon-small" onclick="editTeamSettings('${team.id}')" title="Schooljaar wijzigen">⚙️</button>
+                        <button class="btn-icon-small" onclick="duplicateTeam('${team.id}')" title="Dupliceren">📋</button>
+                        <button class="btn-icon-small btn-danger-icon" onclick="deleteTeam('${team.id}')" title="Verwijderen">🗑️</button>
+                    </span>
                 </div>
             `;
         }).join('');
@@ -896,12 +1202,159 @@ async function deleteTeam(teamId) {
     }
 }
 
+// Edit team settings - open modal
+async function editTeamSettings(teamId) {
+    try {
+        const { doc, getDoc, collection, getDocs } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const teamDoc = await getDoc(doc(db, 'teams', teamId));
+        if (!teamDoc.exists()) {
+            alert('Team niet gevonden');
+            return;
+        }
+
+        const team = teamDoc.data();
+
+        // Get available schooljaren
+        const sjSnapshot = await getDocs(collection(db, 'schooljaren'));
+        const schooljaren = [];
+        sjSnapshot.forEach(d => schooljaren.push({ id: d.id, ...d.data() }));
+        schooljaren.sort((a, b) => (b.naam || b.id).localeCompare(a.naam || a.id));
+
+        // Populate modal
+        document.getElementById('edit-team-id').value = teamId;
+        document.getElementById('edit-team-naam-display').textContent = team.naam || teamId;
+
+        // Populate schooljaar dropdown
+        const dropdown = document.getElementById('edit-team-schooljaar');
+        dropdown.innerHTML = '<option value="">Selecteer schooljaar</option>' +
+            schooljaren.map(sj => `<option value="${sj.id}">'${sj.naam || sj.id}</option>`).join('');
+
+        // Select current schooljaar
+        const currentSj = team.schooljaarId || team.schooljaar || '';
+        if (currentSj) {
+            dropdown.value = currentSj;
+        }
+
+        // Show modal
+        document.getElementById('edit-team-modal').style.display = 'flex';
+
+    } catch (error) {
+        console.error('Error loading team:', error);
+        alert('Fout bij laden: ' + error.message);
+    }
+}
+
+function closeEditTeamModal() {
+    document.getElementById('edit-team-modal').style.display = 'none';
+}
+
+async function saveEditTeam() {
+    try {
+        const { doc, setDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const teamId = document.getElementById('edit-team-id').value;
+        const schooljaarId = document.getElementById('edit-team-schooljaar').value;
+
+        if (!schooljaarId) {
+            alert('Selecteer een schooljaar');
+            return;
+        }
+
+        await setDoc(doc(db, 'teams', teamId), {
+            schooljaarId: schooljaarId
+        }, { merge: true });
+
+        closeEditTeamModal();
+        await loadTeamsList();
+
+        // Reload team data if this is the current team
+        if (state.teamId === teamId) {
+            await loadTeamDataFromFirestore();
+            renderAll();
+        }
+
+    } catch (error) {
+        console.error('Error saving team:', error);
+        alert('Fout bij opslaan: ' + error.message);
+    }
+}
+
+// Duplicate team to new school year
+async function duplicateTeam(teamId) {
+    try {
+        const { doc, getDoc, setDoc } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+
+        const teamDoc = await getDoc(doc(db, 'teams', teamId));
+        if (!teamDoc.exists()) {
+            alert('Team niet gevonden');
+            return;
+        }
+
+        const team = teamDoc.data();
+        const newSchooljaar = prompt(`Nieuw schooljaar voor kopie van "${team.naam}":`, '');
+        if (!newSchooljaar) return;
+
+        const newTeamName = prompt('Naam voor het nieuwe team:', `${team.naam} ${newSchooljaar}`);
+        if (!newTeamName) return;
+
+        // Generate new team ID
+        const newTeamId = newTeamName
+            .toLowerCase()
+            .replace(/\s+/g, '-')
+            .replace(/[^a-z0-9-]/g, '')
+            .substring(0, 20);
+
+        // Check if new team already exists
+        const existingTeam = await getDoc(doc(db, 'teams', newTeamId));
+        if (existingTeam.exists()) {
+            alert(`Team "${newTeamName}" bestaat al!`);
+            return;
+        }
+
+        // Copy team data
+        const newTeamData = {
+            ...team,
+            naam: newTeamName,
+            schooljaar: newSchooljaar,
+            createdAt: new Date().toISOString(),
+            duplicatedFrom: teamId
+        };
+
+        // Optionally reset toewijzingen
+        if (confirm('Wil je de toewijzingen (lessen/taken) resetten voor het nieuwe team?\n\nJa = Schone start (alleen structuur behouden)\nNee = Alles kopiëren inclusief toewijzingen')) {
+            newTeamData.toewijzingen = [];
+            newTeamData.docentTaken = [];
+        }
+
+        await setDoc(doc(db, 'teams', newTeamId), newTeamData);
+
+        alert(`Team "${newTeamName}" is aangemaakt als kopie van "${team.naam}"!`);
+        await loadTeamsList();
+        await loadTeamsDropdown();
+
+    } catch (error) {
+        console.error('Error duplicating team:', error);
+        alert('Fout bij dupliceren: ' + error.message);
+    }
+}
+
+
 // Create new team
 async function createNewTeam() {
     const teamName = document.getElementById('new-team-name').value.trim();
+    const schooljaarId = document.getElementById('new-team-schooljaar')?.value || '';
 
     if (!teamName) {
         alert('Vul een teamnaam in');
+        return;
+    }
+
+    if (!schooljaarId) {
+        alert('Selecteer een schooljaar');
         return;
     }
 
@@ -923,16 +1376,19 @@ async function createNewTeam() {
             return;
         }
 
-        // Create team
+        // Create team with schooljaarId reference (weeks come from schooljaar)
         await setDoc(doc(db, 'teams', teamId), {
             naam: teamName,
+            schooljaarId: schooljaarId,
             createdAt: new Date().toISOString()
         });
 
-        console.log('Team created:', teamId, teamName);
+        console.log('Team created:', teamId, teamName, 'schooljaar:', schooljaarId);
 
         // Clear form
         document.getElementById('new-team-name').value = '';
+        const dropdown = document.getElementById('new-team-schooljaar');
+        if (dropdown) dropdown.selectedIndex = 0;
 
         // Reload lists
         await loadTeamsList();
@@ -1399,27 +1855,49 @@ async function switchActiveTeam(teamId) {
 
     console.log('Switching to team:', teamId || 'all teams');
 
+    // Store in localStorage for persistence across refresh
+    if (teamId) {
+        localStorage.setItem('adminSelectedTeam', teamId);
+    } else {
+        localStorage.removeItem('adminSelectedTeam');
+    }
+
     state.teamId = teamId || 'all-teams';
 
+    // CRITICAL: Clear state FIRST before loading new team data
+    // This prevents old data from being saved to the new team via syncUsersToDocentenState
+    state.leerjaren = [];
+    state.vakken = [];
+    state.docenten = [];
+    state.toewijzingen = [];
+    state.taken = [];
+    state.docentTaken = [];
+    state.schooljaarId = '';
+    state.basisweken = { 1: 8, 2: 8, 3: 8, 4: 8 };
+    state.wekenPerPeriode = { 1: 10, 2: 10, 3: 10, 4: 10 };
+
     if (teamId) {
-        // Load specific team data
+        // Load specific team data (this will populate state with the correct team's data)
         await loadTeamDataFromFirestore();
         subscribeToTeamData();
-    } else {
-        // Clear data for "all teams" view
-        state.leerjaren = [];
-        state.vakken = [];
-        state.docenten = [];
-        state.toewijzingen = [];
-        state.taken = [];
-        state.docentTaken = [];
     }
+    // For "all teams" view, state is already cleared above
+
+    // Reset view states
+    klassenState.geselecteerdeDocent = null;
+    klassenState.geselecteerdLeerjaar = null;
+    klassenState.geselecteerdPeriode = null;
 
     // Reload save states
     await renderSavedStatesFirestore();
 
-    // Re-render
+    // Re-render everything
     renderAll();
+
+    // Update UI indicators
+    updateUserIndicator();
+
+    console.log('Team switch complete, now viewing:', state.teamId);
 }
 
 // Load all save states for admins (across all teams)
@@ -1539,6 +2017,60 @@ function showSaveIndicator() {
     console.log('Data opgeslagen');
 }
 
+// Update week info displays (read-only from team/schooljaar settings)
+async function updateWeekInfoDisplays() {
+    // Get schooljaarId from team
+    const schooljaarId = state.schooljaarId || state.schooljaar || '';
+    const basisweken = state.basisweken || { 1: 8, 2: 8, 3: 8, 4: 8 };
+    const wekenPerPeriode = state.wekenPerPeriode || { 1: 10, 2: 10, 3: 10, 4: 10 };
+
+    // Build admin hover text
+    let adminHoverText = 'Beheerd door: ';
+    try {
+        const { collection, getDocs } = window.firebaseFunctions;
+        const db = window.firebaseDb;
+        const usersSnapshot = await getDocs(collection(db, 'users'));
+        const admins = [];
+        usersSnapshot.forEach(doc => {
+            const userData = doc.data();
+            if (userData.rol === 'admin') {
+                admins.push(userData.afkorting || userData.naam || 'Admin');
+            }
+        });
+        adminHoverText += admins.length > 0 ? admins.join(', ') : '(geen admin)';
+    } catch (e) {
+        adminHoverText += '(onbekend)';
+    }
+
+    // Lessenbeheer display
+    const displaySchooljaar = document.getElementById('display-schooljaar');
+    if (displaySchooljaar) {
+        displaySchooljaar.textContent = schooljaarId ? `'${schooljaarId}` : '-';
+    }
+    const displayBasisweken = document.getElementById('display-basisweken');
+    if (displayBasisweken) {
+        displayBasisweken.textContent = `P1:${basisweken[1]}, P2:${basisweken[2]}, P3:${basisweken[3]}, P4:${basisweken[4]}`;
+    }
+    const weekInfoCard = document.getElementById('week-info-card');
+    if (weekInfoCard) {
+        weekInfoCard.title = adminHoverText;
+    }
+
+    // Takenbeheer display
+    const takenDisplaySchooljaar = document.getElementById('taken-display-schooljaar');
+    if (takenDisplaySchooljaar) {
+        takenDisplaySchooljaar.textContent = schooljaarId ? `'${schooljaarId}` : '-';
+    }
+    const displayPeriodeweken = document.getElementById('display-periodeweken');
+    if (displayPeriodeweken) {
+        displayPeriodeweken.textContent = `P1:${wekenPerPeriode[1]}, P2:${wekenPerPeriode[2]}, P3:${wekenPerPeriode[3]}, P4:${wekenPerPeriode[4]}`;
+    }
+    const takenWeekInfoCard = document.getElementById('taken-week-info-card');
+    if (takenWeekInfoCard) {
+        takenWeekInfoCard.title = adminHoverText;
+    }
+}
+
 // Render all UI components
 function renderAll() {
     renderLeerjarenLijst();
@@ -1550,15 +2082,8 @@ function renderAll() {
     updateLeerjaarSelector();
     renderSavedStates();
 
-    // Update summary displays safely
-    const basiswekenSummary = document.getElementById('basisweken-summary');
-    if (basiswekenSummary) {
-        basiswekenSummary.textContent = `P1: ${state.basisweken[1]} | P2: ${state.basisweken[2]} | P3: ${state.basisweken[3]} | P4: ${state.basisweken[4]}`;
-    }
-    const wekenPeriodeSummary = document.getElementById('weken-periode-summary');
-    if (wekenPeriodeSummary) {
-        wekenPeriodeSummary.textContent = `P1: ${state.wekenPerPeriode[1]} | P2: ${state.wekenPerPeriode[2]} | P3: ${state.wekenPerPeriode[3]} | P4: ${state.wekenPerPeriode[4]}`;
-    }
+    // Update week info displays (read-only from team settings)
+    updateWeekInfoDisplays();
 
     // Re-render any active views
     if (typeof renderKlassenCurriculum === 'function') renderKlassenCurriculum();
@@ -6452,3 +6977,16 @@ window.deleteUser = deleteUser;
 window.switchActiveTeam = switchActiveTeam;
 window.createNewTeam = createNewTeam;
 window.deleteTeam = deleteTeam;
+window.editTeamSettings = editTeamSettings;
+window.duplicateTeam = duplicateTeam;
+
+// Schooljaren functions
+window.createSchooljaar = createSchooljaar;
+window.editSchooljaar = editSchooljaar;
+window.deleteSchooljaar = deleteSchooljaar;
+window.closeEditSchooljaarModal = closeEditSchooljaarModal;
+window.saveEditSchooljaar = saveEditSchooljaar;
+
+// Team modal functions
+window.closeEditTeamModal = closeEditTeamModal;
+window.saveEditTeam = saveEditTeam;
