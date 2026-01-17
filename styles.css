@@ -3448,9 +3448,17 @@ body {
 }
 
 .login-header h2 {
-    color: white;
+    font-family: 'Albert Sans', sans-serif;
+    font-weight: 700;
+    font-size: 2.2rem;
+    color: #ffffff;
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
     margin: 0 0 var(--space-xs);
-    font-size: 1.5rem;
+    text-shadow: 1px 1px 0 #8b5cf6, -1px -1px 0 #10b981, 0 0 15px rgba(255, 255, 255, 0.4);
+    letter-spacing: 1px;
+    filter: none;
 }
 
 .login-header p {
