@@ -499,7 +499,10 @@ function subscribeToTeamData() {
                 }
             }
         }, (error) => {
-            console.error('Error listening to team data:', error);
+            // Only log errors if user is still authenticated (avoid noise on logout)
+            if (currentAuthUser) {
+                console.error('Error listening to team data:', error);
+            }
         });
 
         console.log('Subscribed to team data updates');
