@@ -2090,8 +2090,7 @@ function renderAll() {
     if (typeof renderVerdelingView === 'function') renderVerdelingView();
     if (typeof renderDashboard === 'function') renderDashboard();
 
-    // Default to Teamleden view
-    switchTab('docenten');
+    // Note: Default tab is set in HTML (docenten has 'active' class)
 }
 
 // ============================================
