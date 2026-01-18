@@ -667,14 +667,17 @@
                                 <option value="">-- Selecteer eerst leerjaar --</option>
                             </select>
                         </div>
+                        <div class="form-group">
+                            <label for="klassen-vak">Vak</label>
+                            <select id="klassen-vak" disabled>
+                                <option value="alle">Alle vakken</option>
+                            </select>
+                        </div>
 
                         <div class="klassen-legenda">
                             <h4>Legenda</h4>
                             <div class="legenda-item">
                                 <span class="legenda-box available"></span> Beschikbare leseenheid*
-                            </div>
-                            <div class="legenda-item">
-                                <span class="legenda-box available dashed"></span> Beschikbare les**
                             </div>
                             <div class="legenda-item">
                                 <span class="legenda-box mine"></span> Door jou geselecteerd
@@ -684,7 +687,7 @@
                             </div>
                             <div class="legenda-footnote">
                                 <em>*Een eenheid = 30 minuten</em><br>
-                                <em>**niet splitsbaar</em>
+                                <em>✂️ = splitsbaar, 🔒 = niet splitsbaar</em>
                             </div>
                         </div>
                     </div>

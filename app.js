@@ -4303,13 +4303,15 @@ function getBlokjesForDocent(docentId) {
 let klassenState = {
     geselecteerdeDocent: null,
     geselecteerdLeerjaar: null,
-    geselecteerdeKlas: null
+    geselecteerdeKlas: null,
+    geselecteerdVak: null
 };
 
 function initKlassenView() {
     const docentSelect = document.getElementById('klassen-docent');
     const leerjaarSelect = document.getElementById('klassen-leerjaar');
     const klasSelect = document.getElementById('klassen-klas');
+    const vakSelect = document.getElementById('klassen-vak');
 
     docentSelect.addEventListener('change', () => {
         klassenState.geselecteerdeDocent = docentSelect.value || null;
@@ -4318,8 +4320,10 @@ function initKlassenView() {
 
     leerjaarSelect.addEventListener('change', () => {
         klassenState.geselecteerdLeerjaar = leerjaarSelect.value || null;
+        klassenState.geselecteerdeKlas = 'alle'; // Default to all classes
+        klassenState.geselecteerdVak = 'alle'; // Default to all vakken
         updateKlassenKlasSelector();
-        klassenState.geselecteerdeKlas = null;
+        updateKlassenVakSelector();
         renderKlassenCurriculum();
     });
 
@@ -4327,11 +4331,17 @@ function initKlassenView() {
         klassenState.geselecteerdeKlas = klasSelect.value || null;
         renderKlassenCurriculum();
     });
+
+    vakSelect.addEventListener('change', () => {
+        klassenState.geselecteerdVak = vakSelect.value || 'alle';
+        renderKlassenCurriculum();
+    });
 }
 
 function renderKlassenView() {
     updateKlassenDocentSelector();
     updateKlassenLeerjaarSelector();
+    updateKlassenVakSelector();
     renderKlassenCurriculum();
 }
 
@@ -4380,8 +4390,39 @@ function updateKlassenKlasSelector() {
     }
 
     selector.disabled = false;
-    selector.innerHTML = '<option value="">-- Selecteer klas --</option>' +
-        leerjaar.klassen.map(k => `<option value="${k}" ${klassenState.geselecteerdeKlas === k ? 'selected' : ''}>${k}</option>`).join('');
+    // Add "Alle klassen" as first option
+    const currentValue = klassenState.geselecteerdeKlas || 'alle';
+    selector.innerHTML = '<option value="alle"' + (currentValue === 'alle' ? ' selected' : '') + '>Alle klassen</option>' +
+        leerjaar.klassen.map(k => `<option value="${k}" ${currentValue === k ? 'selected' : ''}>${k}</option>`).join('');
+
+    // Auto-select "alle" if nothing selected yet
+    if (!klassenState.geselecteerdeKlas) {
+        klassenState.geselecteerdeKlas = 'alle';
+    }
+}
+
+function updateKlassenVakSelector() {
+    const selector = document.getElementById('klassen-vak');
+    if (!selector) return;
+
+    if (!klassenState.geselecteerdLeerjaar) {
+        selector.innerHTML = '<option value="alle">Alle vakken</option>';
+        selector.disabled = true;
+        return;
+    }
+
+    // Get vakken for selected leerjaar
+    const leerjaarVakken = state.vakken
+        .filter(v => v.leerjaar === klassenState.geselecteerdLeerjaar)
+        .map(v => v.naam);
+
+    // Remove duplicates and sort
+    const uniqueVakken = [...new Set(leerjaarVakken)].sort((a, b) => a.localeCompare(b, 'nl'));
+
+    const currentValue = klassenState.geselecteerdVak || 'alle';
+    selector.disabled = false;
+    selector.innerHTML = '<option value="alle"' + (currentValue === 'alle' ? ' selected' : '') + '>Alle vakken</option>' +
+        uniqueVakken.map(v => `<option value="${v}" ${currentValue === v ? 'selected' : ''}>${v}</option>`).join('');
 }
 
 function renderKlassenCurriculum() {
@@ -4389,6 +4430,7 @@ function renderKlassenCurriculum() {
     const titel = document.getElementById('klassen-klas-titel');
     const leerjaarTitel = document.getElementById('klassen-leerjaar-titel');
 
+    // 'alle' is now a valid value for geselecteerdeKlas
     if (!klassenState.geselecteerdeDocent || !klassenState.geselecteerdLeerjaar || !klassenState.geselecteerdeKlas) {
         container.innerHTML = '<p class="empty-state">Selecteer een teamlid, leerjaar en klas om het curriculum te zien</p>';
         titel.textContent = '';
@@ -4396,8 +4438,20 @@ function renderKlassenCurriculum() {
         return;
     }
 
+    // Determine which classes to show
+    const leerjaar = state.leerjaren.find(l => l.naam === klassenState.geselecteerdLeerjaar);
+    const klassenToShow = klassenState.geselecteerdeKlas === 'alle'
+        ? (leerjaar?.klassen || [])
+        : [klassenState.geselecteerdeKlas];
+
     // Get vakken for this leerjaar, split by type
-    const alleVakken = state.vakken.filter(v => v.leerjaar === klassenState.geselecteerdLeerjaar);
+    let alleVakken = state.vakken.filter(v => v.leerjaar === klassenState.geselecteerdLeerjaar);
+
+    // Apply vak filter
+    if (klassenState.geselecteerdVak && klassenState.geselecteerdVak !== 'alle') {
+        alleVakken = alleVakken.filter(v => v.naam === klassenState.geselecteerdVak);
+    }
+
     const basisVakken = alleVakken.filter(v => v.type !== 'ontwikkelweken' && v.periodes);
     const owVakken = alleVakken.filter(v => v.type === 'ontwikkelweken' && v.ontwikkelweken);
 
@@ -4429,142 +4483,173 @@ function renderKlassenCurriculum() {
         });
     });
 
-    // Calculate progress for selected class only
+    // Calculate progress for selected class(es)
     let totalUnitsClass = 0;
     let assignedUnitsClass = 0;
     alleVakken.forEach(vak => {
         const klassen = vak.klassen || [];
-        if (!klassen.includes(klassenState.geselecteerdeKlas)) return;
-        if (vak.type === 'ontwikkelweken' && vak.ontwikkelweken) {
-            [1, 2, 3, 4, 5, 6, 7, 8].forEach(ow => {
-                const count = vak.ontwikkelweken[ow] || 0;
-                totalUnitsClass += count;
-                for (let i = 1; i <= count; i++) {
-                    const blokjeId = `${vak.id}-${klassenState.geselecteerdeKlas}-OW${ow}-${i}`;
-                    if (state.toewijzingen.some(t => t.blokjeId === blokjeId)) assignedUnitsClass++;
-                }
-            });
-        } else if (vak.periodes) {
-            [1, 2, 3, 4].forEach(p => {
-                const count = vak.periodes[p] || 0;
-                totalUnitsClass += count;
-                for (let i = 1; i <= count; i++) {
-                    const blokjeId = `${vak.id}-${klassenState.geselecteerdeKlas}-P${p}-${i}`;
-                    if (state.toewijzingen.some(t => t.blokjeId === blokjeId)) assignedUnitsClass++;
-                }
-            });
-        }
+        klassenToShow.forEach(targetKlas => {
+            if (!klassen.includes(targetKlas)) return;
+            if (vak.type === 'ontwikkelweken' && vak.ontwikkelweken) {
+                [1, 2, 3, 4, 5, 6, 7, 8].forEach(ow => {
+                    const count = vak.ontwikkelweken[ow] || 0;
+                    totalUnitsClass += count;
+                    for (let i = 1; i <= count; i++) {
+                        const blokjeId = `${vak.id}-${targetKlas}-OW${ow}-${i}`;
+                        if (state.toewijzingen.some(t => t.blokjeId === blokjeId)) assignedUnitsClass++;
+                    }
+                });
+            } else if (vak.periodes) {
+                [1, 2, 3, 4].forEach(p => {
+                    const count = vak.periodes[p] || 0;
+                    totalUnitsClass += count;
+                    for (let i = 1; i <= count; i++) {
+                        const blokjeId = `${vak.id}-${targetKlas}-P${p}-${i}`;
+                        if (state.toewijzingen.some(t => t.blokjeId === blokjeId)) assignedUnitsClass++;
+                    }
+                });
+            }
+        });
     });
 
     const yearPct = totalUnitsYear > 0 ? Math.round((assignedUnitsYear / totalUnitsYear) * 100) : 0;
     const classPct = totalUnitsClass > 0 ? Math.round((assignedUnitsClass / totalUnitsClass) * 100) : 0;
 
     leerjaarTitel.innerHTML = `<span style="color:var(--accent-primary)">${klassenState.geselecteerdLeerjaar}</span> <span style="color:#ffe9a0;font-size:0.7rem">(${yearPct}% verdeeld)</span>`;
-    titel.innerHTML = `<span style="color:var(--accent-primary)">${escapeHtml(klassenState.geselecteerdeKlas)}</span> <span style="color:#ffe9a0;font-size:0.7rem">(${classPct}% verdeeld)</span>`;
+
+    // Title: show "Alle klassen" or specific class name
+    const klasLabel = klassenState.geselecteerdeKlas === 'alle'
+        ? 'Alle klassen'
+        : escapeHtml(klassenState.geselecteerdeKlas);
+    // Only show percentage for specific class, not for "Alle klassen" (redundant with year %)
+    const klasPctHtml = klassenState.geselecteerdeKlas === 'alle'
+        ? ''
+        : ` <span style="color:#ffe9a0;font-size:0.7rem">(${classPct}% verdeeld)</span>`;
+    titel.innerHTML = `<span style="color:var(--accent-primary)">${klasLabel}</span>${klasPctHtml}`;
 
     if (alleVakken.length === 0) {
         container.innerHTML = '<p class="empty-state">Geen lessen voor dit leerjaar</p>';
         return;
     }
 
-    // Generate HTML: 4 rows (one per periode), 3 columns (Basisweken | OW-A | OW-B)
-    container.innerHTML = [1, 2, 3, 4].map(periode => {
-        const ow1 = (periode - 1) * 2 + 1;  // OW1, OW3, OW5, OW7
-        const ow2 = (periode - 1) * 2 + 2;  // OW2, OW4, OW6, OW8
+    // Store original klas selection for restoration
+    const originalKlas = klassenState.geselecteerdeKlas;
 
-        const basisVakkenMetPeriode = basisVakken.filter(v => (v.periodes[periode] || 0) > 0);
-        const owVakkenMetOW1 = owVakken.filter(v => (v.ontwikkelweken[ow1] || 0) > 0);
-        const owVakkenMetOW2 = owVakken.filter(v => (v.ontwikkelweken[ow2] || 0) > 0);
-        // Calculate lesuren per class for this period (for the selected docent) - ALL LEERJAREN
-        const lesuurPerKlas = {};
+    // Generate HTML: loop through classes, then 4 periods per class
+    container.innerHTML = klassenToShow.map(currentKlas => {
+        // Temporarily set klas for render functions to use
+        klassenState.geselecteerdeKlas = currentKlas;
 
-        // Calculate for basisweken - all vakken across all leerjaren
-        state.vakken.filter(v => v.type !== 'ontwikkelweken' && v.periodes && (v.periodes[periode] || 0) > 0).forEach(vak => {
-            const count = vak.periodes[periode] || 0;
-            const klassen = vak.klassen || [];
-            klassen.forEach(klas => {
-                for (let i = 1; i <= count; i++) {
-                    const blokjeId = `${vak.id}-${klas}-P${periode}-${i}`;
-                    const toewijzing = state.toewijzingen.find(t => t.blokjeId === blokjeId && t.docentId === klassenState.geselecteerdeDocent);
-                    if (toewijzing) {
-                        if (!lesuurPerKlas[klas]) lesuurPerKlas[klas] = { basis: 0, ow1: 0, ow2: 0 };
-                        lesuurPerKlas[klas].basis += 0.5; // 1 eenheid = 0.5 klokuur
+        // Class header (only if showing multiple classes)
+        const classHeader = klassenToShow.length > 1 ? `
+            <div class="klas-section-header">
+                <h3 style="color: var(--accent-primary); margin: var(--space-md) 0 var(--space-sm);">📚 ${escapeHtml(currentKlas)}</h3>
+            </div>
+        ` : '';
+
+        const periodesHtml = [1, 2, 3, 4].map(periode => {
+            const ow1 = (periode - 1) * 2 + 1;  // OW1, OW3, OW5, OW7
+            const ow2 = (periode - 1) * 2 + 2;  // OW2, OW4, OW6, OW8
+
+            const basisVakkenMetPeriode = basisVakken.filter(v => (v.periodes[periode] || 0) > 0);
+            const owVakkenMetOW1 = owVakken.filter(v => (v.ontwikkelweken[ow1] || 0) > 0);
+            const owVakkenMetOW2 = owVakken.filter(v => (v.ontwikkelweken[ow2] || 0) > 0);
+            // Calculate lesuren per class/vak for this period (for the selected docent) - ALL LEERJAREN
+            const lesuurPerKlasVak = {};
+
+            // Calculate for basisweken - all vakken across all leerjaren
+            state.vakken.filter(v => v.type !== 'ontwikkelweken' && v.periodes && (v.periodes[periode] || 0) > 0).forEach(vak => {
+                const count = vak.periodes[periode] || 0;
+                const klassen = vak.klassen || [];
+                const vakAfkorting = (vak.naam || '').substring(0, 3).toLowerCase();
+                klassen.forEach(klas => {
+                    const key = `${klas} (${vakAfkorting})`;
+                    for (let i = 1; i <= count; i++) {
+                        const blokjeId = `${vak.id}-${klas}-P${periode}-${i}`;
+                        const toewijzing = state.toewijzingen.find(t => t.blokjeId === blokjeId && t.docentId === klassenState.geselecteerdeDocent);
+                        if (toewijzing) {
+                            if (!lesuurPerKlasVak[key]) lesuurPerKlasVak[key] = { basis: 0, ow1: 0, ow2: 0, vakNaam: vak.naam };
+                            lesuurPerKlasVak[key].basis += 0.5; // 1 eenheid = 0.5 klokuur
+                        }
                     }
-                }
+                });
             });
-        });
 
-        // Calculate for OW1 - all vakken across all leerjaren
-        state.vakken.filter(v => v.type === 'ontwikkelweken' && v.ontwikkelweken && (v.ontwikkelweken[ow1] || 0) > 0).forEach(vak => {
-            const count = vak.ontwikkelweken[ow1] || 0;
-            const klassen = vak.klassen || [];
-            klassen.forEach(klas => {
-                for (let i = 1; i <= count; i++) {
-                    const blokjeId = `${vak.id}-${klas}-OW${ow1}-${i}`;
-                    const toewijzing = state.toewijzingen.find(t => t.blokjeId === blokjeId && t.docentId === klassenState.geselecteerdeDocent);
-                    if (toewijzing) {
-                        if (!lesuurPerKlas[klas]) lesuurPerKlas[klas] = { basis: 0, ow1: 0, ow2: 0 };
-                        lesuurPerKlas[klas].ow1 += 0.5;
+            // Calculate for OW1 - all vakken across all leerjaren
+            state.vakken.filter(v => v.type === 'ontwikkelweken' && v.ontwikkelweken && (v.ontwikkelweken[ow1] || 0) > 0).forEach(vak => {
+                const count = vak.ontwikkelweken[ow1] || 0;
+                const klassen = vak.klassen || [];
+                const vakAfkorting = (vak.naam || '').substring(0, 3).toLowerCase();
+                klassen.forEach(klas => {
+                    const key = `${klas} (${vakAfkorting})`;
+                    for (let i = 1; i <= count; i++) {
+                        const blokjeId = `${vak.id}-${klas}-OW${ow1}-${i}`;
+                        const toewijzing = state.toewijzingen.find(t => t.blokjeId === blokjeId && t.docentId === klassenState.geselecteerdeDocent);
+                        if (toewijzing) {
+                            if (!lesuurPerKlasVak[key]) lesuurPerKlasVak[key] = { basis: 0, ow1: 0, ow2: 0, vakNaam: vak.naam };
+                            lesuurPerKlasVak[key].ow1 += 0.5;
+                        }
                     }
-                }
+                });
             });
-        });
 
-        // Calculate for OW2 - all vakken across all leerjaren
-        state.vakken.filter(v => v.type === 'ontwikkelweken' && v.ontwikkelweken && (v.ontwikkelweken[ow2] || 0) > 0).forEach(vak => {
-            const count = vak.ontwikkelweken[ow2] || 0;
-            const klassen = vak.klassen || [];
-            klassen.forEach(klas => {
-                for (let i = 1; i <= count; i++) {
-                    const blokjeId = `${vak.id}-${klas}-OW${ow2}-${i}`;
-                    const toewijzing = state.toewijzingen.find(t => t.blokjeId === blokjeId && t.docentId === klassenState.geselecteerdeDocent);
-                    if (toewijzing) {
-                        if (!lesuurPerKlas[klas]) lesuurPerKlas[klas] = { basis: 0, ow1: 0, ow2: 0 };
-                        lesuurPerKlas[klas].ow2 += 0.5;
+            // Calculate for OW2 - all vakken across all leerjaren
+            state.vakken.filter(v => v.type === 'ontwikkelweken' && v.ontwikkelweken && (v.ontwikkelweken[ow2] || 0) > 0).forEach(vak => {
+                const count = vak.ontwikkelweken[ow2] || 0;
+                const klassen = vak.klassen || [];
+                const vakAfkorting = (vak.naam || '').substring(0, 3).toLowerCase();
+                klassen.forEach(klas => {
+                    const key = `${klas} (${vakAfkorting})`;
+                    for (let i = 1; i <= count; i++) {
+                        const blokjeId = `${vak.id}-${klas}-OW${ow2}-${i}`;
+                        const toewijzing = state.toewijzingen.find(t => t.blokjeId === blokjeId && t.docentId === klassenState.geselecteerdeDocent);
+                        if (toewijzing) {
+                            if (!lesuurPerKlasVak[key]) lesuurPerKlasVak[key] = { basis: 0, ow1: 0, ow2: 0, vakNaam: vak.naam };
+                            lesuurPerKlasVak[key].ow2 += 0.5;
+                        }
                     }
-                }
+                });
             });
-        });
 
-        // Calculate totals
-        let totaalBasis = 0, totaalOw1 = 0, totaalOw2 = 0;
-        Object.values(lesuurPerKlas).forEach(v => {
-            totaalBasis += v.basis;
-            totaalOw1 += v.ow1;
-            totaalOw2 += v.ow2;
-        });
+            // Calculate totals
+            let totaalBasis = 0, totaalOw1 = 0, totaalOw2 = 0;
+            Object.values(lesuurPerKlasVak).forEach(v => {
+                totaalBasis += v.basis;
+                totaalOw1 += v.ow1;
+                totaalOw2 += v.ow2;
+            });
 
-        const klassenRows = Object.keys(lesuurPerKlas).sort().map(klas => {
-            const v = lesuurPerKlas[klas];
-            return `<div class="uren-mini-row"><span>${escapeHtml(klas)}</span><span>${v.basis.toFixed(1)}</span><span>${v.ow1.toFixed(1)}</span><span>${v.ow2.toFixed(1)}</span></div>`;
-        }).join('');
+            const klassenRows = Object.keys(lesuurPerKlasVak).sort().map(key => {
+                const v = lesuurPerKlasVak[key];
+                return `<div class="uren-mini-row" title="${escapeHtml(v.vakNaam || '')}"><span>${escapeHtml(key)}</span><span>${v.basis.toFixed(1)}</span><span>${v.ow1.toFixed(1)}</span><span>${v.ow2.toFixed(1)}</span></div>`;
+            }).join('');
 
-        return `
+            return `
             <div class="periode-row">
                 <div class="periode-section basisweken-section">
                     <div class="periode-section-header">
                         <h4>📚 Periode ${periode}</h4>
                     </div>
-                    ${renderVakSections(basisVakkenMetPeriode, periode, 'P')}
+                    ${renderVakSections(basisVakkenMetPeriode, periode, 'P', currentKlas)}
                     ${basisVakkenMetPeriode.length === 0 ? '<p class="empty-state" style="font-size:0.75rem">Geen lessen</p>' : ''}
                 </div>
                 <div class="periode-section ow-section">
                     <div class="periode-section-header">
                         <h4>⭐ Ontwikkelweek ${ow1}</h4>
                     </div>
-                    ${renderVakSectionsOW(owVakkenMetOW1, ow1)}
+                    ${renderVakSectionsOW(owVakkenMetOW1, ow1, currentKlas)}
                     ${owVakkenMetOW1.length === 0 ? '<p class="empty-state" style="font-size:0.75rem">Geen lessen</p>' : ''}
                 </div>
                 <div class="periode-section ow-section">
                     <div class="periode-section-header">
                         <h4>⭐ Ontwikkelweek ${ow2}</h4>
                     </div>
-                    ${renderVakSectionsOW(owVakkenMetOW2, ow2)}
+                    ${renderVakSectionsOW(owVakkenMetOW2, ow2, currentKlas)}
                     ${owVakkenMetOW2.length === 0 ? '<p class="empty-state" style="font-size:0.75rem">Geen lessen</p>' : ''}
                 </div>
                 <div class="periode-section lesuren-section">
                     <div class="periode-section-header">
-                        <h4>🕐 Lesuren per week <small style="font-weight:normal;color:var(--text-muted)">(in klokuren)</small></h4>
+                        <h4>🕐 Lesuren per week P${periode} <small style="font-weight:normal;color:var(--text-muted);font-size:0.6rem">(in klokuren)</small></h4>
                     </div>
                     <div class="lesuren-tabel">
                         <div class="uren-mini-header"><span>Klas</span><span>Basis</span><span>OW${ow1}</span><span>OW${ow2}</span></div>
@@ -4574,69 +4659,75 @@ function renderKlassenCurriculum() {
                 </div>
             </div>
         `;
+        }).join('');
+
+        return classHeader + periodesHtml;
     }).join('');
+
+    // Restore original klas selection
+    klassenState.geselecteerdeKlas = originalKlas;
 }
 
-function renderVakSections(vakken, periode, prefix) {
+function renderVakSections(vakken, periode, prefix, klas) {
     return vakken.map(vak => {
         const count = vak.periodes[periode] || 0;
-        const { allAvailableMine, someMine } = checkVakSelectionState(vak, `${prefix}${periode}`, count);
+        const { allAvailableMine, someMine } = checkVakSelectionState(vak, `${prefix}${periode}`, count, klas);
 
         return `
             <div class="vak-section">
                 <div class="vak-section-header">
                     <span class="vak-section-color" style="background: ${vak.kleur}"></span>
-                    <span class="vak-section-naam">${escapeHtml(vak.naam)}</span>
+                    <span class="vak-section-naam">${escapeHtml(vak.naam)} ${vak.splitsbaar !== false ? '✂️' : '🔒'}</span>
                     <label class="select-all-label" title="Alles selecteren/deselecteren">
                         <input type="checkbox" 
                                class="select-all-checkbox" 
                                ${allAvailableMine ? 'checked' : ''} 
                                ${someMine ? 'data-indeterminate="true"' : ''}
-                               onchange="toggleAllVakLeseenheden('${vak.id}', '${prefix}${periode}', this.checked)">
+                               onchange="toggleAllVakLeseenheden('${vak.id}', '${prefix}${periode}', this.checked, '${klas}')">
                         <span>${vak.splitsbaar !== false ? 'alles' : 'selecteer'}</span>
                     </label>
                 </div>
-                <div class="leseenheid-checkboxes">
-                    ${renderLeseenheidCheckboxes(vak, `${prefix}${periode}`, count)}
+                <div class="leseenheid-checkboxes${vak.splitsbaar === false ? ' non-splittable' : ''}">
+                    ${renderLeseenheidCheckboxes(vak, `${prefix}${periode}`, count, klas)}
                 </div>
             </div>
         `;
     }).join('');
 }
 
-function renderVakSectionsOW(vakken, ow) {
+function renderVakSectionsOW(vakken, ow, klas) {
     return vakken.map(vak => {
         const count = vak.ontwikkelweken[ow] || 0;
-        const { allAvailableMine, someMine } = checkVakSelectionState(vak, `OW${ow}`, count);
+        const { allAvailableMine, someMine } = checkVakSelectionState(vak, `OW${ow}`, count, klas);
 
         return `
             <div class="vak-section">
                 <div class="vak-section-header">
                     <span class="vak-section-color" style="background: ${vak.kleur}"></span>
-                    <span class="vak-section-naam">${escapeHtml(vak.naam)}</span>
+                    <span class="vak-section-naam">${escapeHtml(vak.naam)} ${vak.splitsbaar !== false ? '✂️' : '🔒'}</span>
                     <label class="select-all-label" title="Alles selecteren/deselecteren">
                         <input type="checkbox" 
                                class="select-all-checkbox" 
                                ${allAvailableMine ? 'checked' : ''} 
                                ${someMine ? 'data-indeterminate="true"' : ''}
-                               onchange="toggleAllVakLeseenheden('${vak.id}', 'OW${ow}', this.checked)">
+                               onchange="toggleAllVakLeseenheden('${vak.id}', 'OW${ow}', this.checked, '${klas}')">
                         <span>${vak.splitsbaar !== false ? 'alles' : 'selecteer'}</span>
                     </label>
                 </div>
-                <div class="leseenheid-checkboxes">
-                    ${renderLeseenheidCheckboxes(vak, `OW${ow}`, count)}
+                <div class="leseenheid-checkboxes${vak.splitsbaar === false ? ' non-splittable' : ''}">
+                    ${renderLeseenheidCheckboxes(vak, `OW${ow}`, count, klas)}
                 </div>
             </div>
         `;
     }).join('');
 }
 
-function checkVakSelectionState(vak, periodeKey, count) {
+function checkVakSelectionState(vak, periodeKey, count, klas) {
     let mineCount = 0;
     let availableCount = 0;
 
     for (let num = 1; num <= count; num++) {
-        const blokjeId = `${vak.id}-${klassenState.geselecteerdeKlas}-${periodeKey}-${num}`;
+        const blokjeId = `${vak.id}-${klas}-${periodeKey}-${num}`;
         const toewijzing = state.toewijzingen.find(t => t.blokjeId === blokjeId);
         if (toewijzing && toewijzing.docentId === klassenState.geselecteerdeDocent) {
             mineCount++;
@@ -4654,9 +4745,9 @@ function checkVakSelectionState(vak, periodeKey, count) {
     };
 }
 
-function renderLeseenheidCheckboxes(vak, periodeKey, count) {
+function renderLeseenheidCheckboxes(vak, periodeKey, count, klas) {
     return Array.from({ length: count }, (_, i) => i + 1).map(num => {
-        const blokjeId = `${vak.id}-${klassenState.geselecteerdeKlas}-${periodeKey}-${num}`;
+        const blokjeId = `${vak.id}-${klas}-${periodeKey}-${num}`;
         const toewijzing = state.toewijzingen.find(t => t.blokjeId === blokjeId);
         const isMine = toewijzing && toewijzing.docentId === klassenState.geselecteerdeDocent;
         const isTaken = toewijzing && toewijzing.docentId !== klassenState.geselecteerdeDocent;
@@ -4669,13 +4760,17 @@ function renderLeseenheidCheckboxes(vak, periodeKey, count) {
         if (isNonSplitsbaar && !isTaken && !isMine) className += ' locked';
 
         // Click handler logic:
-        // - Splittable lessons: always clickable
-        // - Non-splittable lessons: show alert if taken by others, otherwise no action (use checkbox)
+        // - Splittable lessons: toggle individual unit
+        // - Non-splittable lessons: toggle ALL units at once (or show alert if taken)
         let clickHandler = '';
         if (!isNonSplitsbaar) {
             clickHandler = `toggleLeseenheid('${blokjeId}', '${periodeKey}')`;
         } else if (isTaken) {
-            clickHandler = `alert('Deze leseenheid is al geselecteerd door ${escapeHtml(takenByDocent || 'een andere docent')}')`;
+            clickHandler = `alert('Deze les is al geselecteerd door ${escapeHtml(takenByDocent || 'een andere docent')}')`;
+        } else {
+            // Non-splittable and not taken: toggle all units
+            const vakId = vak.id;
+            clickHandler = `toggleAllVakLeseenheden('${vakId}', '${periodeKey}', ${!isMine}, '${klas}')`;
         }
 
         return `<div class="${className}" 
@@ -4723,7 +4818,7 @@ function toggleLeseenheid(blokjeId, periodeKey) {
     renderKlassenCurriculum();
 }
 
-function toggleAllVakLeseenheden(vakId, periodeKey, selectAll) {
+function toggleAllVakLeseenheden(vakId, periodeKey, selectAll, klas) {
     if (!klassenState.geselecteerdeDocent) {
         alert('Selecteer eerst een docent');
         return;
@@ -4754,7 +4849,7 @@ function toggleAllVakLeseenheden(vakId, periodeKey, selectAll) {
     // For non-splittable: check first if ANY unit is taken by someone else
     if (!isSplitsbaar && selectAll) {
         for (let num = 1; num <= count; num++) {
-            const blokjeId = `${vakId}-${klassenState.geselecteerdeKlas}-${periodeKey}-${num}`;
+            const blokjeId = `${vakId}-${klas}-${periodeKey}-${num}`;
             const takenByOther = state.toewijzingen.find(t => t.blokjeId === blokjeId && t.docentId !== klassenState.geselecteerdeDocent);
             if (takenByOther) {
                 const docent = state.docenten.find(d => d.id === takenByOther.docentId);
@@ -4767,7 +4862,7 @@ function toggleAllVakLeseenheden(vakId, periodeKey, selectAll) {
     }
 
     for (let num = 1; num <= count; num++) {
-        const blokjeId = `${vakId}-${klassenState.geselecteerdeKlas}-${periodeKey}-${num}`;
+        const blokjeId = `${vakId}-${klas}-${periodeKey}-${num}`;
         const existing = state.toewijzingen.find(t => t.blokjeId === blokjeId && t.docentId === klassenState.geselecteerdeDocent);
         const takenByOther = state.toewijzingen.find(t => t.blokjeId === blokjeId && t.docentId !== klassenState.geselecteerdeDocent);
 

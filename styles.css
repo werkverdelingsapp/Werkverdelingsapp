@@ -1720,6 +1720,21 @@ body {
     border-style: dashed;
 }
 
+/* Legend group outline for non-splittable lessons */
+.legenda-group-outline {
+    display: inline-flex;
+    gap: 2px;
+    box-shadow: 0 0 0 1px var(--text-muted);
+    border-radius: 3px;
+    padding: 1px;
+}
+
+.legenda-group-outline .legenda-box {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
 .legenda-box.mine {
     background: var(--accent-primary);
     border-color: var(--accent-primary);
@@ -1932,6 +1947,11 @@ body {
     gap: var(--space-xs);
 }
 
+/* Non-splittable lessons - no special container styling, icon indicates type */
+.leseenheid-checkboxes.non-splittable {
+    display: inline-flex;
+}
+
 .leseenheid-checkbox {
     display: flex;
     align-items: center;
@@ -1984,13 +2004,12 @@ body {
 }
 
 .leseenheid-checkbox.locked {
-    cursor: not-allowed;
-    border-style: dashed;
+    cursor: pointer;
+    /* Now clickable - selects all units at once */
 }
 
 .leseenheid-checkbox.locked:hover {
     transform: none;
-    border-color: var(--text-muted);
 }
 
 /* ============================================
@@ -3222,12 +3241,20 @@ body {
 /* Lessen page - 4-column grid layout for lesuren-tabel */
 .lesuren-section {
     min-width: 180px;
+    align-self: stretch;
+    /* Fill the full height of the row */
+    display: flex;
+    flex-direction: column;
 }
 
 .lesuren-tabel {
     background: var(--bg-secondary);
     border-radius: var(--radius-sm);
     padding: var(--space-sm);
+    flex: 1;
+    /* Grow to fill available space in lesuren-section */
+    overflow-y: auto;
+    /* Scroll if content overflows */
 }
 
 .lesuren-tabel .uren-mini-header {
