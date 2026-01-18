@@ -6244,20 +6244,67 @@ function updateFilterKlassen() {
 }
 window.updateFilterKlassen = updateFilterKlassen;
 
+// Update vak filter dropdown based on selected leerjaar and weektype
+function updateFilterVakken() {
+    const leerjaarSelect = document.getElementById('filter-leerjaar');
+    const weektypeSelect = document.getElementById('filter-weektype');
+    const vakSelect = document.getElementById('filter-vak');
+    if (!vakSelect) return;
+
+    const selectedLeerjaar = leerjaarSelect?.value || 'alle';
+    const selectedWeektype = weektypeSelect?.value || 'alle';
+    const currentVakValue = vakSelect.value;
+
+    // Filter vakken by leerjaar first
+    let filteredVakken = selectedLeerjaar === 'alle'
+        ? state.vakken
+        : state.vakken.filter(v => v.leerjaar === selectedLeerjaar);
+
+    // Further filter by weektype
+    if (selectedWeektype === 'basis') {
+        // Only vakken that have basisweken (periodes > 0)
+        filteredVakken = filteredVakken.filter(v => {
+            return [1, 2, 3, 4].some(p => (v.periodes?.[p] || 0) > 0);
+        });
+    } else if (selectedWeektype === 'ow') {
+        // Only vakken that have ontwikkelweken (any OW > 0)
+        filteredVakken = filteredVakken.filter(v => {
+            return [1, 2, 3, 4, 5, 6, 7, 8].some(ow => (v.ontwikkelweken?.[ow] || 0) > 0);
+        });
+    }
+
+    // Extract names, remove duplicates and sort
+    let vakken = [...new Set(filteredVakken.map(v => v.naam))].sort((a, b) => a.localeCompare(b, 'nl'));
+
+    vakSelect.innerHTML = '<option value="alle">Alle vakken</option>' +
+        vakken.map(v => `<option value="${v}">${v}</option>`).join('');
+
+    // Restore selection if still valid
+    if (vakken.includes(currentVakValue)) {
+        vakSelect.value = currentVakValue;
+    } else {
+        vakSelect.value = 'alle';
+    }
+}
+window.updateFilterVakken = updateFilterVakken;
+
 function renderDashboardLessen() {
     // Update filter dropdowns
     updateFilterLeerjaren();
     updateFilterKlassen();
+    updateFilterVakken();
 
     // Read filter values
     const selectedLeerjaar = document.getElementById('filter-leerjaar')?.value || 'alle';
     const selectedKlas = document.getElementById('filter-klas')?.value || 'alle';
     const selectedWeektype = document.getElementById('filter-weektype')?.value || 'alle';
+    const selectedVak = document.getElementById('filter-vak')?.value || 'alle';
 
     // Store in dashboard state for use in row rendering
     dashboardState.selectedLeerjaar = selectedLeerjaar;
     dashboardState.selectedKlas = selectedKlas;
     dashboardState.selectedWeektype = selectedWeektype;
+    dashboardState.selectedVak = selectedVak;
 
     const container = document.getElementById('dashboard-lessen-grid');
 
@@ -6501,10 +6548,18 @@ function calculateKlasProgress(leerjaarNaam, klas, vakken) {
 window.renderDashboardLessen = renderDashboardLessen;
 
 function renderLessenKlasRow(klas, leerjaarNaam, klasPct) {
-    // Get vakken for this leerjaar, sorted alphabetically
-    const leerjaarVakken = state.vakken
+    // Get vak filter from dashboard state
+    const selectedVak = dashboardState.selectedVak || 'alle';
+
+    // Get vakken for this leerjaar, sorted alphabetically, filtered by selected vak
+    let leerjaarVakken = state.vakken
         .filter(v => v.leerjaar === leerjaarNaam)
         .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'));
+
+    // Apply vak filter
+    if (selectedVak !== 'alle') {
+        leerjaarVakken = leerjaarVakken.filter(v => v.naam === selectedVak);
+    }
 
     // Get weektype filter from dashboard state
     const selectedWeektype = dashboardState.selectedWeektype || 'alle';

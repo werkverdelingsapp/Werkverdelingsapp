@@ -785,17 +785,20 @@
                     <!-- Filter dropdowns -->
                     <div class="dashboard-filters">
                         <select id="filter-leerjaar" class="dashboard-filter-dropdown"
-                            onchange="updateFilterKlassen(); renderDashboardLessen()">
+                            onchange="updateFilterKlassen(); updateFilterVakken(); renderDashboardLessen()">
                             <option value="alle">Alle leerjaren</option>
                         </select>
                         <select id="filter-klas" class="dashboard-filter-dropdown" onchange="renderDashboardLessen()">
                             <option value="alle">Alle klassen</option>
                         </select>
                         <select id="filter-weektype" class="dashboard-filter-dropdown"
-                            onchange="renderDashboardLessen()">
+                            onchange="updateFilterVakken(); renderDashboardLessen()">
                             <option value="alle">Alle weken</option>
                             <option value="basis">Basisweken</option>
                             <option value="ow">Ontwikkelweken</option>
+                        </select>
+                        <select id="filter-vak" class="dashboard-filter-dropdown" onchange="renderDashboardLessen()">
+                            <option value="alle">Alle vakken</option>
                         </select>
                     </div>
                 </div>
