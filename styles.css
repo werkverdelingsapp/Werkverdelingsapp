@@ -5092,63 +5092,69 @@ body {
 
 .admin-layout-clean {
     display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: var(--space-lg);
-    max-width: 1400px;
+    grid-template-columns: 1fr 1fr;
+    /* 50/50 split */
+    gap: var(--space-sm);
+    /* Match other page spacing */
+    max-width: 1600px;
 }
 
 .admin-main-section {
     background: var(--bg-card);
     border-radius: var(--radius-lg);
-    padding: var(--space-lg);
+    padding: var(--space-md);
     border: 1px solid var(--border-color);
 }
 
 .admin-side-section {
     display: flex;
     flex-direction: column;
-    gap: var(--space-md);
+    gap: var(--space-xs);
+    /* Match mijn-overzicht spacing */
 }
 
 .admin-section-header {
-    margin-bottom: var(--space-md);
-    padding-bottom: var(--space-sm);
+    margin-bottom: var(--space-sm);
+    padding-bottom: var(--space-xs);
     border-bottom: 1px solid var(--border-color);
 }
 
 .admin-section-header h3,
 .admin-section-header h4 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
 }
 
 .admin-card-compact {
     background: var(--bg-card);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     padding: var(--space-md);
     border: 1px solid var(--border-color);
 }
 
 .admin-form-compact {
-    margin-bottom: var(--space-lg);
+    margin-bottom: var(--space-md);
 }
 
 .admin-form-compact .form-row {
     display: flex;
     gap: var(--space-xs);
     margin-bottom: var(--space-xs);
+    align-items: center;
 }
 
 .admin-form-compact input,
 .admin-form-compact select {
     flex: 1;
     min-width: 0;
-    padding: var(--space-xs) var(--space-sm);
+    height: 32px;
+    padding: 0 var(--space-sm);
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     color: var(--text-primary);
-    font-size: 0.8rem;
+    font-size: 0.85rem;
 }
 
 .admin-form-compact input::placeholder {
@@ -5158,18 +5164,21 @@ body {
 .form-row.compact {
     display: flex;
     gap: var(--space-xs);
-    margin-bottom: var(--space-sm);
+    margin-bottom: var(--space-xs);
+    align-items: center;
 }
 
-.form-row.compact input {
+.form-row.compact input,
+.form-row.compact select {
     flex: 1;
     min-width: 0;
-    padding: var(--space-xs) var(--space-sm);
+    height: 32px;
+    padding: 0 var(--space-sm);
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     color: var(--text-primary);
-    font-size: 0.8rem;
+    font-size: 0.85rem;
 }
 
 .btn-xs {
@@ -5289,6 +5298,10 @@ body {
     font-size: 0.8rem;
 }
 
+.schooljaar-row:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
 .schooljaar-row .schooljaar-naam {
     flex: 1;
     font-weight: 500;
@@ -5306,16 +5319,23 @@ body {
 }
 
 .week-input-small {
-    width: 35px;
-    padding: 4px;
-    font-size: 0.75rem;
+    width: 55px !important;
+    flex: 0 0 55px !important;
+    height: 32px;
+    padding: 0 6px;
+    font-size: 0.85rem;
     text-align: center;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
 }
 
 .form-label-inline {
-    font-size: 0.7rem;
-    color: var(--text-muted);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
     white-space: nowrap;
+    min-width: 50px;
 }
 
 .team-row {
@@ -5326,6 +5346,57 @@ body {
     background: var(--bg-secondary);
     border-radius: var(--radius-sm);
     font-size: 0.8rem;
+}
+
+.team-row:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+/* Week input labels */
+.week-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    width: 20px;
+    text-align: center;
+    flex: 0 0 20px;
+}
+
+.week-header-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    width: 55px;
+    text-align: center;
+}
+
+.admin-week-header {
+    display: grid;
+    grid-template-columns: 60px repeat(4, 55px);
+    gap: var(--space-xs);
+    margin-bottom: 2px;
+}
+
+.admin-week-inputs {
+    display: grid;
+    grid-template-columns: 60px repeat(4, 55px);
+    gap: var(--space-xs);
+    align-items: center;
+    margin-bottom: var(--space-xs);
+}
+
+/* Modal variants with wider label column */
+.modal-week-header {
+    grid-template-columns: 80px repeat(4, 55px);
+}
+
+.modal-week-inputs {
+    grid-template-columns: 80px repeat(4, 55px);
+}
+
+.admin-week-row {
+    display: grid;
+    grid-template-columns: 60px repeat(4, 20px 55px);
+    gap: var(--space-xs);
+    align-items: center;
 }
 
 .team-row .team-name {

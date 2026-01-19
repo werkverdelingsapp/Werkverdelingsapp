@@ -768,7 +768,7 @@ async function renderSavedStatesFirestore() {
         return;
     }
 
-    container.innerHTML = '<p class="loading-text">Laden...</p>';
+    // Don't show loading message to prevent flicker
 
     try {
         const saveStates = await loadSaveStatesFromFirestore();
@@ -2089,7 +2089,7 @@ function renderAll() {
     renderTakenSelectie();
     updateDocentSelector();
     updateLeerjaarSelector();
-    renderSavedStates();
+    renderSavedStatesFirestore();
 
     // Update week info displays (read-only from team settings)
     updateWeekInfoDisplays();
@@ -2478,6 +2478,11 @@ function initNavigation() {
             } else if (viewId === 'taken') {
                 updateTakenDocentSelector();
                 renderTakenSelectie();
+            } else if (viewId === 'admin') {
+                renderSavedStatesFirestore();
+                loadSchooljaren();
+                loadTeamsList();
+                loadUsersList();
             }
         });
     });
@@ -7411,7 +7416,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTakenSelectie();
     updateDocentSelector();
     updateLeerjaarSelector();
-    renderSavedStates(); // Admin panel
+    // Note: Save states are rendered after Firebase auth in the login callback
 
     // Initialize Firebase Authentication
     initFirebaseAuth();

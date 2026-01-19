@@ -177,31 +177,40 @@
                                 <h4>📅 Schooljaren</h4>
                             </div>
                             <div class="schooljaar-form">
-                                <div class="form-row compact">
-                                    <input type="text" id="new-schooljaar-naam" placeholder="26-27" style="width:60px"
-                                        maxlength="5">
+                                <div class="form-row compact" style="max-width: 200px;">
+                                    <input type="text" id="new-schooljaar-naam" placeholder="26-27"
+                                        style="width:70px; flex:0 0 70px;" maxlength="5">
+                                    <button class="btn btn-primary btn-xs" onclick="createSchooljaar()">➕
+                                        Toevoegen</button>
+                                </div>
+                                <div class="admin-week-header">
+                                    <span style="width:60px;"></span>
+                                    <span class="week-header-label">P1</span>
+                                    <span class="week-header-label">P2</span>
+                                    <span class="week-header-label">P3</span>
+                                    <span class="week-header-label">P4</span>
+                                </div>
+                                <div class="admin-week-inputs">
                                     <span class="form-label-inline">Basis:</span>
                                     <input type="number" id="sj-basis-1" value="8" min="1" max="20"
-                                        class="week-input-small" title="P1">
+                                        class="week-input-small">
                                     <input type="number" id="sj-basis-2" value="8" min="1" max="20"
-                                        class="week-input-small" title="P2">
+                                        class="week-input-small">
                                     <input type="number" id="sj-basis-3" value="8" min="1" max="20"
-                                        class="week-input-small" title="P3">
+                                        class="week-input-small">
                                     <input type="number" id="sj-basis-4" value="8" min="1" max="20"
-                                        class="week-input-small" title="P4">
+                                        class="week-input-small">
                                 </div>
-                                <div class="form-row compact">
-                                    <span style="width:60px"></span>
+                                <div class="admin-week-inputs">
                                     <span class="form-label-inline">Periode:</span>
                                     <input type="number" id="sj-periode-1" value="10" min="1" max="20"
-                                        class="week-input-small" title="P1">
+                                        class="week-input-small">
                                     <input type="number" id="sj-periode-2" value="10" min="1" max="20"
-                                        class="week-input-small" title="P2">
+                                        class="week-input-small">
                                     <input type="number" id="sj-periode-3" value="10" min="1" max="20"
-                                        class="week-input-small" title="P3">
+                                        class="week-input-small">
                                     <input type="number" id="sj-periode-4" value="10" min="1" max="20"
-                                        class="week-input-small" title="P4">
-                                    <button class="btn btn-primary btn-xs" onclick="createSchooljaar()">➕</button>
+                                        class="week-input-small">
                                 </div>
                             </div>
                             <div id="schooljaren-list" class="schooljaren-list-compact">
@@ -214,12 +223,13 @@
                             <div class="admin-section-header">
                                 <h4>🏢 Teams</h4>
                             </div>
-                            <div class="form-row compact">
-                                <input type="text" id="new-team-name" placeholder="Team naam" style="flex:2">
-                                <select id="new-team-schooljaar" style="flex:1">
-                                    <option value="">Schooljaar</option>
+                            <div class="form-row compact" style="max-width: 300px;">
+                                <input type="text" id="new-team-name" placeholder="Team naam"
+                                    style="width: 120px; flex: 0 0 120px;">
+                                <select id="new-team-schooljaar" style="width: 80px; flex: 0 0 80px;">
+                                    <option value="">Jaar</option>
                                 </select>
-                                <button class="btn btn-primary btn-xs" onclick="createNewTeam()">➕</button>
+                                <button class="btn btn-primary btn-xs" onclick="createNewTeam()">➕ Toevoegen</button>
                             </div>
                             <div id="teams-list" class="teams-list-compact">
                                 <p class="empty-state small">Laden...</p>
@@ -231,9 +241,10 @@
                             <div class="admin-section-header">
                                 <h4>💾 States</h4>
                             </div>
-                            <div class="form-row compact">
-                                <input type="text" id="save-state-name" placeholder="State naam">
-                                <button class="btn btn-primary btn-xs" onclick="smartSaveState()">💾</button>
+                            <div class="form-row compact" style="max-width: 250px;">
+                                <input type="text" id="save-state-name" placeholder="State naam"
+                                    style="width: 120px; flex: 0 0 120px;">
+                                <button class="btn btn-primary btn-xs" onclick="smartSaveState()">💾 Opslaan</button>
                             </div>
                             <div id="saved-states-list" class="saved-states-list-compact">
                                 <p class="empty-state small">Geen states</p>
@@ -1218,25 +1229,26 @@
                     <span id="edit-schooljaar-naam-display" class="form-value-display"></span>
                 </div>
                 <div class="modal-form-row">
-                    <label>Basisweken (P1-P4)</label>
-                    <div class="week-inputs-row">
-                        <input type="number" id="edit-sj-basis-1" min="1" max="20" class="week-input-small" title="P1">
-                        <input type="number" id="edit-sj-basis-2" min="1" max="20" class="week-input-small" title="P2">
-                        <input type="number" id="edit-sj-basis-3" min="1" max="20" class="week-input-small" title="P3">
-                        <input type="number" id="edit-sj-basis-4" min="1" max="20" class="week-input-small" title="P4">
+                    <div class="admin-week-header modal-week-header">
+                        <span style="width:80px;"></span>
+                        <span class="week-header-label">P1</span>
+                        <span class="week-header-label">P2</span>
+                        <span class="week-header-label">P3</span>
+                        <span class="week-header-label">P4</span>
                     </div>
-                </div>
-                <div class="modal-form-row">
-                    <label>Periodeweken (P1-P4)</label>
-                    <div class="week-inputs-row">
-                        <input type="number" id="edit-sj-periode-1" min="1" max="20" class="week-input-small"
-                            title="P1">
-                        <input type="number" id="edit-sj-periode-2" min="1" max="20" class="week-input-small"
-                            title="P2">
-                        <input type="number" id="edit-sj-periode-3" min="1" max="20" class="week-input-small"
-                            title="P3">
-                        <input type="number" id="edit-sj-periode-4" min="1" max="20" class="week-input-small"
-                            title="P4">
+                    <div class="admin-week-inputs modal-week-inputs">
+                        <span class="form-label-inline" style="width:80px;">Basis:</span>
+                        <input type="number" id="edit-sj-basis-1" min="1" max="20" class="week-input-small">
+                        <input type="number" id="edit-sj-basis-2" min="1" max="20" class="week-input-small">
+                        <input type="number" id="edit-sj-basis-3" min="1" max="20" class="week-input-small">
+                        <input type="number" id="edit-sj-basis-4" min="1" max="20" class="week-input-small">
+                    </div>
+                    <div class="admin-week-inputs modal-week-inputs">
+                        <span class="form-label-inline" style="width:80px;">Periode:</span>
+                        <input type="number" id="edit-sj-periode-1" min="1" max="20" class="week-input-small">
+                        <input type="number" id="edit-sj-periode-2" min="1" max="20" class="week-input-small">
+                        <input type="number" id="edit-sj-periode-3" min="1" max="20" class="week-input-small">
+                        <input type="number" id="edit-sj-periode-4" min="1" max="20" class="week-input-small">
                     </div>
                 </div>
             </div>
