@@ -3018,7 +3018,7 @@ function initCurriculumForm() {
             kleur: document.getElementById('vak-kleur').value,
             klassen: leerjaar.klassen,
             splitsbaar: document.getElementById('vak-splitsbaar-value').value === 'true',
-            opslagfactor: parseInt(document.getElementById('vak-opslagfactor').value) || 40
+            opslagfactor: !isNaN(parseInt(document.getElementById('vak-opslagfactor').value)) ? parseInt(document.getElementById('vak-opslagfactor').value) : 40
         };
 
         if (vakType === 'basisweken') {
@@ -3830,7 +3830,7 @@ function renderVakkenLijst() {
 }
 
 function renderVakTableRow(vak, type) {
-    const opslagfactor = vak.opslagfactor || 40;
+    const opslagfactor = (vak.opslagfactor !== undefined) ? vak.opslagfactor : 40;
     const splitsbaar = vak.splitsbaar !== false;
 
     let periodeCells = '';
@@ -3901,7 +3901,7 @@ function editVak(vakId) {
     document.getElementById('edit-vak-id').value = vak.id;
     document.getElementById('edit-vak-naam').value = vak.naam;
     document.getElementById('edit-vak-kleur').value = vak.kleur || '#6366f1';
-    document.getElementById('edit-vak-opslagfactor').value = vak.opslagfactor || 40;
+    document.getElementById('edit-vak-opslagfactor').value = (vak.opslagfactor !== undefined) ? vak.opslagfactor : 40;
 
     // Display klassen in header
     const klassenDisplay = document.getElementById('edit-vak-klassen-display');
@@ -3990,7 +3990,8 @@ function saveEditVak() {
     // Update vak properties
     vak.naam = document.getElementById('edit-vak-naam').value.trim();
     vak.kleur = document.getElementById('edit-vak-kleur').value;
-    vak.opslagfactor = parseInt(document.getElementById('edit-vak-opslagfactor').value) || 40;
+    const opslagfactorVal = parseInt(document.getElementById('edit-vak-opslagfactor').value);
+    vak.opslagfactor = !isNaN(opslagfactorVal) ? opslagfactorVal : 40;
     vak.splitsbaar = document.getElementById('edit-vak-splitsbaar-value').value === 'true';
     vak.type = type;
 
@@ -4113,7 +4114,8 @@ function initEditVakForm() {
         // Update vak properties
         vak.naam = document.getElementById('edit-vak-naam').value.trim();
         vak.kleur = document.getElementById('edit-vak-kleur').value;
-        vak.opslagfactor = parseInt(document.getElementById('edit-vak-opslagfactor').value) || 40;
+        const opslagfactorVal = parseInt(document.getElementById('edit-vak-opslagfactor').value);
+        vak.opslagfactor = !isNaN(opslagfactorVal) ? opslagfactorVal : 40;
         vak.splitsbaar = document.getElementById('edit-vak-splitsbaar-value').value === 'true';
         vak.type = type;
 
@@ -5386,7 +5388,7 @@ function renderVerdelingView() {
             const vznzPerFactor = {};
             blokjes.forEach(blokje => {
                 const vak = state.vakken.find(v => v.id === blokje.vakId);
-                const factor = vak ? (vak.opslagfactor || 40) : 40;
+                const factor = (vak && vak.opslagfactor !== undefined) ? vak.opslagfactor : 40;
                 if (!vznzPerFactor[factor]) {
                     vznzPerFactor[factor] = { klokuren: 0 };
                 }
@@ -5502,12 +5504,12 @@ function renderVerdelingView() {
         // Calculate VZNZ with correct multipliers
         basisBlokjes.forEach(blokje => {
             const vak = state.vakken.find(v => v.id === blokje.vakId);
-            const factor = vak ? (vak.opslagfactor || 40) : 40;
+            const factor = (vak && vak.opslagfactor !== undefined) ? vak.opslagfactor : 40;
             totaalVznzSchoolJaar += 0.5 * basiswekenAantal * (factor / 100);
         });
         [...ow1Blokjes, ...ow2Blokjes].forEach(blokje => {
             const vak = state.vakken.find(v => v.id === blokje.vakId);
-            const factor = vak ? (vak.opslagfactor || 40) : 40;
+            const factor = (vak && vak.opslagfactor !== undefined) ? vak.opslagfactor : 40;
             totaalVznzSchoolJaar += 0.5 * (factor / 100);
         });
     });
@@ -6129,12 +6131,12 @@ function renderDashboardPvi() {
 
             periodeBlokjes.forEach(b => {
                 const vak = state.vakken.find(v => v.id === b.vakId);
-                const factor = vak ? (vak.opslagfactor || 40) : 40;
+                const factor = (vak && vak.opslagfactor !== undefined) ? vak.opslagfactor : 40;
                 onderwijsGeselecteerd += 0.5 * basiswekenAantal * (1 + factor / 100);
             });
             [...ow1Blokjes, ...ow2Blokjes].forEach(b => {
                 const vak = state.vakken.find(v => v.id === b.vakId);
-                const factor = vak ? (vak.opslagfactor || 40) : 40;
+                const factor = (vak && vak.opslagfactor !== undefined) ? vak.opslagfactor : 40;
                 onderwijsGeselecteerd += 0.5 * (1 + factor / 100);
             });
         });
