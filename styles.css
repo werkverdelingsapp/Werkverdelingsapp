@@ -4795,6 +4795,10 @@ body {
 
 .dashboard-taken-grid {
     padding: var(--space-md);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-md);
+    align-items: start;
 }
 
 /* Taken Sections */
@@ -4802,7 +4806,7 @@ body {
     background: var(--bg-card);
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);
-    margin-bottom: var(--space-md);
+    margin-bottom: 0;
     overflow: hidden;
 }
 
